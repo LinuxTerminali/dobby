@@ -68,9 +68,12 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         val t0 = System.currentTimeMillis()
         toolObjects.forEach { it.sink = { ev -> trySend(ev) } }
         try {
-            conv.sendMessageAsync(userText).collect { msg ->
-                val t = msg.text
-                if (t != null && t.isNotEmpty()) trySend(ChatEvent.Token(t))
+            conv.sendMessageAsync(userText).collect { item: Any ->
+                val t = when (item) {
+                    is String -> item
+                    else -> item.javaClass.getMethod("getText").invoke(item) as? String ?: item.toString()
+                }
+                if (t.isNotEmpty()) trySend(ChatEvent.Token(t))
             }
             trySend(ChatEvent.Done(System.currentTimeMillis() - t0))
         } catch (e: Exception) {
