@@ -1,0 +1,57 @@
+{
+  "note": "File names under each Hugging Face repo change; open the repo page and confirm the .litertlm file name before downloading. Gemma repos are gated: accept the licence on HF and set an HF token in Settings.",
+  "models": [
+    {
+      "id": "gemma4-e4b",
+      "name": "Gemma 4 E4B (recommended)",
+      "repo": "litert-community/gemma-4-E4B-it-litert-lm",
+      "file": "gemma-4-E4B-it.litertlm",
+      "url": "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+      "size_gb": 3.7,
+      "backend": "gpu",
+      "supports_tools": true,
+      "supports_vision": true,
+      "license": "Apache-2.0",
+      "gated": true
+    },
+    {
+      "id": "gemma4-e2b",
+      "name": "Gemma 4 E2B (fast)",
+      "repo": "litert-community/gemma-4-E2B-it-litert-lm",
+      "file": "gemma-4-E2B-it.litertlm",
+      "url": "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
+      "size_gb": 2.6,
+      "backend": "gpu",
+      "supports_tools": true,
+      "supports_vision": true,
+      "license": "Apache-2.0",
+      "gated": true
+    },
+    {
+      "id": "qwen3-4b",
+      "name": "Qwen3 4B Instruct 2507",
+      "repo": "litert-community/Qwen3-4B-Instruct-2507",
+      "file": "Qwen3-4B-Instruct-2507.litertlm",
+      "url": "https://huggingface.co/litert-community/Qwen3-4B-Instruct-2507/resolve/main/Qwen3-4B-Instruct-2507.litertlm",
+      "size_gb": 2.8,
+      "backend": "gpu",
+      "supports_tools": true,
+      "supports_vision": false,
+      "license": "Apache-2.0",
+      "gated": false
+    },
+    {
+      "id": "functiongemma-270m",
+      "name": "FunctionGemma 270M (tool router test)",
+      "repo": "google/functiongemma-270m-it",
+      "file": "functiongemma-270m-it.litertlm",
+      "url": "https://huggingface.co/google/functiongemma-270m-it/resolve/main/functiongemma-270m-it.litertlm",
+      "size_gb": 0.3,
+      "backend": "cpu",
+      "supports_tools": true,
+      "supports_vision": false,
+      "license": "Gemma",
+      "gated": true
+    }
+  ]
+}

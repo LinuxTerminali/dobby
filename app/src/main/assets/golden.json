@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {"prompt": "What is the date today? Use the device tool.", "expect_tool": "device.now"},
+    {"prompt": "Extract JSON with amount_inr, last4, direction from: 'Rs.1,240.00 debited from A/c XX1234 on 05-10-26 to SWIGGY. Avl Bal Rs.1,16,810.10'. Reply with JSON only.", "expect_substring": "1240"},
+    {"prompt": "From the same SMS, what is the available balance as a plain number?", "expect_substring": "116810"},
+    {"prompt": "Did I miss any calls this week? Check the call log.", "expect_tool": "calls.missed"},
+    {"prompt": "Find my latest SMS mentioning BESCOM.", "expect_tool": "sms.search"}
+  ]
+}
