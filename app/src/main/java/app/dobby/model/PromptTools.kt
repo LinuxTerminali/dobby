@@ -50,7 +50,8 @@ object PromptTools {
         You will then get a line starting with TOOL_RESULT; use it to answer in plain words, repeating names,
         numbers and dates exactly as they appear. Do not call a tool when none is needed. `*` marks a required argument.
         Each message lists the tools available for that request. If a result is empty or an error, try one other
-        relevant tool before saying you could not find it. Give only the arguments that apply; leave the rest out. Use memory.remember only when the user asks you to
+        relevant tool before saying you could not find it. Give only the arguments that apply; leave the rest out.
+        When asked how much in total, add the amounts and state the total. Use memory.remember only when the user asks you to
         remember something or states a lasting fact about themselves (a place, an account, a preference); never for
         passing events such as what they spent or did today.
     """.trimIndent()

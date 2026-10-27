@@ -5,6 +5,7 @@ import android.os.BatteryManager
 import android.os.Debug
 import app.dobby.App
 import app.dobby.memory.PromptBuilder
+import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
 import app.dobby.model.EngineHolder
 import app.dobby.model.ModelEntry
@@ -41,6 +42,7 @@ class EvalRunner(private val app: App) {
             calls += name to args
             currentMocks.optJSONObject(name) ?: JSONObject().put("error", "no mock for $name in this case")
         }
+        Approvals.autoApprove = true
         val t0 = System.currentTimeMillis()
         engine.load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }, places),
             nativeTools = app.models.toolMode == "native")
@@ -65,6 +67,7 @@ class EvalRunner(private val app: App) {
             val mockTexts = currentMocks.keys().asSequence().map { currentMocks.get(it).toString() }.toList()
             results += EvalMetrics.score(c, calls, offered, out.toString(), if (ttft < 0) total else ttft, total, mockTexts)
         }
+        Approvals.autoApprove = false
         val chargeEnd = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
         val pssMb = Debug.getPss() / 1024
 

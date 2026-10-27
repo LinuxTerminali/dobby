@@ -43,8 +43,12 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     private var promptTools: List<ToolSpec> = emptyList()
     private var promptExecutor: ToolExecutor? = null
 
-    override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean) =
+    private var alwaysAllowed: (String) -> Boolean = { false }
+
+    override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean,
+                              isAlwaysAllowed: (String) -> Boolean) =
         withContext(Dispatchers.IO) {
+            alwaysAllowed = isAlwaysAllowed
             close()
             val wantGpu = entry.backend.equals("gpu", ignoreCase = true)
             engine = try {
@@ -134,7 +138,11 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                     if (steps >= PromptTools.MAX_STEPS) { send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]")); break }
                     steps++
                     send(ChatEvent.ToolCall(call.name, call.args.toString()))
-                    val result = try { promptExecutor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }
+                    val effect = promptTools.firstOrNull { it.name == call.name }?.effect ?: app.dobby.mcp.Effect.READ
+                    val decision = Approvals.preDecide(effect, alwaysAllowed(call.name))
+                        ?: Approvals.request(call.name, call.args, emit = { id -> send(ChatEvent.Confirm(id, call.name, call.args.toString())) })
+                    val result = if (decision == Approvals.Decision.DENY) JSONObject().put("error", "The user did not approve this action. Do not retry it; tell the user it was not done.")
+                        else try { promptExecutor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }
                     send(ChatEvent.ToolResult(call.name, result.toString().take(600)))
                     next = PromptTools.resultMessage(call.name, result)
                 }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import app.dobby.mcp.Effect
 import app.dobby.mcp.ToolSpec
 import app.dobby.util.Fmt
 import app.dobby.reminders.Reminder
@@ -32,25 +33,24 @@ class RemindersConnector(private val context: Context) : Connector {
                 Triple("message", "string", "Body text. Optional"),
                 Triple("hour", "integer", "0-23, for recurring"),
                 Triple("minute", "integer", "0-59, for recurring"),
-                Triple("days", "array", "Days of week as integers 1..7 (1=Sunday). Empty for one-off"),
+                Triple("days", "array", "Day names: [\"mon\",\"tue\",...], or \"weekdays\"/\"weekends\"/\"daily\". Empty for one-off"),
                 Triple("in_minutes", "integer", "One-off: minutes from now"),
                 Triple("at", "string", "One-off: local time 'YYYY-MM-DD HH:MM' or 'HH:MM'"),
                 Triple("place", "string", "Saved place label for a place-based reminder, e.g. office"),
                 Triple("event", "string", "enter or exit, for a place-based reminder"),
-                Triple("prompt", "string", "Optional question to run with tools at trigger time")), listOf("title"))),
+                Triple("prompt", "string", "Optional question to run with tools at trigger time")), listOf("title")), Effect.WRITE),
         ToolSpec("list", "List reminders.", ToolSpec.schema(emptyList())),
-        ToolSpec("delete", "Delete a reminder by id.", ToolSpec.schema(listOf(Triple("id", "string", "Reminder id")), listOf("id"))),
+        ToolSpec("delete", "Delete a reminder by id.", ToolSpec.schema(listOf(Triple("id", "string", "Reminder id")), listOf("id")), Effect.DESTRUCTIVE),
     )
 
     override suspend fun call(tool: String, args: JSONObject): JSONObject = when (tool) {
         "create" -> if (args.optString("place").isNotBlank()) createPlaceReminder(args) else {
-            val daysArr = args.optJSONArray("days") ?: JSONArray()
-            val days = (0 until daysArr.length()).map { daysArr.getInt(it) }.filter { it in 1..7 }
+            val days = app.dobby.util.Days.parse(args.opt("days"))
             val at = resolveAt(args)
             require(days.isNotEmpty() || at > System.currentTimeMillis()) { "give days+hour+minute for recurring; in_minutes or at for one-off; place+event for place-based" }
             val cal = java.util.Calendar.getInstance().apply { if (at > 0) timeInMillis = at }
             val r = Reminder(
-                id = UUID.randomUUID().toString().take(8), title = args.getString("title"), message = args.optString("message"),
+                id = UUID.randomUUID().toString().take(8), title = titleOf(args), message = args.optString("message"),
                 hour = if (days.isNotEmpty()) args.optInt("hour", 9) else cal.get(java.util.Calendar.HOUR_OF_DAY),
                 minute = if (days.isNotEmpty()) args.optInt("minute", 0) else cal.get(java.util.Calendar.MINUTE),
                 days = days, atMillis = at, prompt = args.optString("prompt"))
@@ -64,6 +64,9 @@ class RemindersConnector(private val context: Context) : Connector {
         "delete" -> { val id = args.getString("id"); scheduler.cancel(id); store.delete(id); JSONObject().put("deleted", id) }
         else -> throw IllegalArgumentException("unknown tool $tool")
     }
+
+    private fun titleOf(args: JSONObject): String =
+        args.optString("title").ifBlank { args.optString("message").ifBlank { args.optString("prompt").ifBlank { "Reminder" } } }
 
     /** One-off time from in_minutes, at ('YYYY-MM-DD HH:MM' or 'HH:MM', next occurrence), or at_epoch_millis. */
     private fun resolveAt(args: JSONObject): Long {

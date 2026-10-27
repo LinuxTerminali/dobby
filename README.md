@@ -55,6 +55,11 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Permissions
+Tools declare an effect: READ, WRITE, DESTRUCTIVE. Destructive calls (`memory.forget`, `reminders.delete`,
+`places.delete`) pause the turn and show Allow / Always allow / Deny in chat; a denied call returns an error the
+model must report. Always-allow rules live in Settings → Permissions. Evals auto-approve; scheduled jobs deny.
+
 ## Tool results
 Every tool returns a `summary` sentence in human form (dates as "Sun 26 Oct, 9:01 PM", amounts with Indian
 grouping, durations as "10 min") plus the structured data. The model sees the summary first and copies it,

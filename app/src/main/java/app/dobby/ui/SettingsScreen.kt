@@ -56,6 +56,16 @@ fun SettingsScreen() {
         }
         Hint("Prompt mode avoids the runtime's tool path, which corrupted digits in testing. Switch to Native only to compare.")
         Spacer(Modifier.height(16.dp))
+        SectionTitle("Permissions")
+        var allowed by remember { mutableStateOf(app.permissions.allAllowed()) }
+        if (allowed.isEmpty()) Hint("Deleting tools (memory.forget, reminders.delete, places.delete) ask before running. Tools you set to \"Always allow\" appear here.")
+        allowed.forEach { t ->
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(t, modifier = Modifier.weight(1f))
+                TextButton(onClick = { app.permissions.setAlwaysAllowed(t, false); allowed = app.permissions.allAllowed() }) { Text("Revoke") }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Accounts")
         OutlinedTextField(hf, { hf = it; app.models.hfToken = it }, label = { Text("Hugging Face token (for gated Gemma models)") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))

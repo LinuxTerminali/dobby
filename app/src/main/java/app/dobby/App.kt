@@ -13,10 +13,12 @@ class App : Application() {
     lateinit var models: ModelRegistry; private set
     lateinit var downloader: ModelDownloader; private set
     lateinit var memory: MemoryStore; private set
+    lateinit var permissions: app.dobby.model.PermissionStore; private set
 
     override fun onCreate() {
         super.onCreate()
         memory = MemoryStore(this)
+        permissions = app.dobby.model.PermissionStore(this)
         connectors = ConnectorRegistry(this, memory)
         router = McpRouter { connectors.active(this) }
         models = ModelRegistry(this)

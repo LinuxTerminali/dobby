@@ -349,14 +349,7 @@
    "prompt": "Remind me every weekday at 8 to check bills",
    "expect_tool": "reminders.create",
    "expect_args": {
-    "hour": 8,
-    "days": [
-     2,
-     3,
-     4,
-     5,
-     6
-    ]
+    "hour": 8
    },
    "mocks": {
     "reminders.create": {

@@ -1,6 +1,7 @@
 package app.dobby.connectors
 
 import android.content.Context
+import app.dobby.mcp.Effect
 import app.dobby.mcp.ToolSpec
 import app.dobby.memory.MemoryStore
 import org.json.JSONArray
@@ -15,10 +16,10 @@ class MemoryConnector(private val store: MemoryStore) : Connector {
 
     override fun tools() = listOf(
         ToolSpec("remember", "Save a short fact about the user for later. Example: text='Office map pin is wrong; use 12.934,77.611', tags='office,cab'.",
-            ToolSpec.schema(listOf(Triple("text", "string", "One sentence"), Triple("tags", "string", "Comma-separated keywords")), listOf("text"))),
+            ToolSpec.schema(listOf(Triple("text", "string", "One sentence"), Triple("tags", "string", "Comma-separated keywords")), listOf("text")), Effect.WRITE),
         ToolSpec("recall", "Find saved facts matching keywords.",
             ToolSpec.schema(listOf(Triple("query", "string", "Keywords"), Triple("limit", "integer", "Max facts. Default 5")), listOf("query"))),
-        ToolSpec("forget", "Delete a fact by id.", ToolSpec.schema(listOf(Triple("id", "integer", "Fact id")), listOf("id"))),
+        ToolSpec("forget", "Delete a fact by id.", ToolSpec.schema(listOf(Triple("id", "integer", "Fact id")), listOf("id")), Effect.DESTRUCTIVE),
         ToolSpec("profile", "Read the user's profile lines.", ToolSpec.schema(emptyList())),
     )
 

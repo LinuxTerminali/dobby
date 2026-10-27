@@ -12,6 +12,8 @@ sealed class ChatEvent {
     data class Token(val text: String) : ChatEvent()
     data class ToolCall(val name: String, val args: String) : ChatEvent()
     data class ToolResult(val name: String, val result: String) : ChatEvent()
+    /** The model wants to run a destructive tool; the UI must call Approvals.resolve(id, …). */
+    data class Confirm(val id: String, val name: String, val args: String) : ChatEvent()
     data class Done(val millis: Long) : ChatEvent()
 }
 
@@ -23,7 +25,8 @@ interface LlmEngine {
     val loadedModel: ModelEntry?
     /** "GPU" or "CPU": what actually initialised (may differ from the request after a fallback). */
     val loadedBackend: String?
-    suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean = false)
+    suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean = false,
+                     isAlwaysAllowed: (String) -> Boolean = { false })
     fun send(userText: String): Flow<ChatEvent>
     suspend fun resetConversation()
     suspend fun close()

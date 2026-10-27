@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.dobby.App
 import app.dobby.memory.PromptBuilder
+import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
@@ -21,6 +22,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val messages = mutableStateListOf<ChatMessage>()
     val status = mutableStateOf("No model loaded")
     val busy = mutableStateOf(false)
+    /** A destructive tool call waiting for the user: (approval id, tool, args). */
+    val pendingApproval = mutableStateOf<Triple<String, String, String>?>(null)
     private var loadedSignature: String? = null
     private var nextId = 1L
 
@@ -36,7 +39,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val executor = ToolExecutor { name, args -> app.router.callTool(name, args) }
         try {
             EngineHolder.get(app).load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }),
-                nativeTools = app.models.toolMode == "native")
+                nativeTools = app.models.toolMode == "native", isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
         } catch (e: Exception) {
             status.value = "Load failed: ${e.message}"; return false
         }
@@ -71,7 +74,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 when (ev) {
                     is ChatEvent.Token -> { pending.append(ev.text); if (System.currentTimeMillis() - lastFlush > 80) flush() }
                     is ChatEvent.ToolCall -> { flush(); update(replyId) { it.copy(tools = it.tools + "→ ${ev.name} ${ev.args.take(160)}") } }
-                    is ChatEvent.ToolResult -> { update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
+                    is ChatEvent.ToolResult -> { pendingApproval.value = null; update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
+                    is ChatEvent.Confirm -> { flush(); pendingApproval.value = Triple(ev.id, ev.name, ev.args) }
                     is ChatEvent.Done -> { flush(); status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s" }
                 }
             }
@@ -79,6 +83,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             update(replyId) { it.copy(streaming = false) }
             busy.value = false
         }
+    }
+
+    fun approve(always: Boolean) {
+        val (id, tool, _) = pendingApproval.value ?: return
+        if (always) app.permissions.setAlwaysAllowed(tool, true)
+        Approvals.resolve(id, if (always) Approvals.Decision.ALLOW_ALWAYS else Approvals.Decision.ALLOW_ONCE)
+        pendingApproval.value = null
+    }
+
+    fun deny() {
+        val (id, _, _) = pendingApproval.value ?: return
+        Approvals.resolve(id, Approvals.Decision.DENY)
+        pendingApproval.value = null
     }
 
     fun clear() { messages.clear(); viewModelScope.launch { runCatching { EngineHolder.get(app).resetConversation() } } }

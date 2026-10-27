@@ -75,6 +75,7 @@ fun ChatScreen(vm: ChatViewModel) {
                 items(vm.messages, key = { it.id }) { m -> MessageRow(m) }
             }
         }
+        vm.pendingApproval.value?.let { (_, tool, args) -> ApprovalCard(tool, args, onAllow = { vm.approve(false) }, onAlways = { vm.approve(true) }, onDeny = { vm.deny() }) }
         InputBar(input, onChange = { input = it }, enabled = !vm.busy.value) { vm.send(input); input = "" }
     }
 }
@@ -141,6 +142,24 @@ private fun ToolTrace(lines: List<String>) {
                 Column(Modifier.padding(top = 6.dp)) {
                     lines.forEach { Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApprovalCard(tool: String, args: String, onAllow: () -> Unit, onAlways: () -> Unit, onDeny: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Dobby wants to run $tool", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(args.take(200), style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(vertical = 6.dp))
+            Row {
+                androidx.compose.material3.FilledTonalButton(onClick = onAllow) { Text("Allow") }
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.TextButton(onClick = onAlways) { Text("Always allow") }
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.TextButton(onClick = onDeny) { Text("Deny") }
             }
         }
     }

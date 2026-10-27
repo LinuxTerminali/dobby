@@ -6,6 +6,7 @@ import app.dobby.location.GeofenceManager
 import app.dobby.location.Place
 import app.dobby.location.PlaceRule
 import app.dobby.location.PlaceStore
+import app.dobby.mcp.Effect
 import app.dobby.mcp.ToolSpec
 import app.dobby.util.Fmt
 import org.json.JSONArray
@@ -32,7 +33,7 @@ class PlacesConnector(private val context: Context) : Connector {
                 Triple("days", "array", "Days 1=Sun..7=Sat; empty = any"), Triple("from_hour", "integer", "0-23, default 0"), Triple("to_hour", "integer", "1-24, default 24"),
                 Triple("title", "string", "Notification title"), Triple("message", "string", "Plain notification text"), Triple("prompt", "string", "Optional: a question Dobby should answer with tools when it fires")), listOf("label", "event", "title"))),
         ToolSpec("events", "Recent enter/exit events.", ToolSpec.schema(listOf(Triple("days", "integer", "Look back. Default 7")))),
-        ToolSpec("delete", "Delete a place by label.", ToolSpec.schema(listOf(Triple("label", "string", "Place label")), listOf("label"))),
+        ToolSpec("delete", "Delete a place by label.", ToolSpec.schema(listOf(Triple("label", "string", "Place label")), listOf("label")), Effect.DESTRUCTIVE),
     )
 
     override suspend fun call(tool: String, args: JSONObject): JSONObject = when (tool) {
