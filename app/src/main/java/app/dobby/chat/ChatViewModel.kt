@@ -6,13 +6,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.dobby.App
+import app.dobby.memory.PromptBuilder
 import app.dobby.model.ChatEvent
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
-import app.dobby.memory.PromptBuilder
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-data class ChatMessage(val role: String, var text: String, val tools: MutableList<String> = mutableListOf())
+/** Immutable: every update replaces the list entry so Compose sees a change. */
+data class ChatMessage(val id: Long, val role: String, val text: String, val tools: List<String> = emptyList(), val streaming: Boolean = false)
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val app get() = getApplication<App>()
@@ -20,6 +22,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val status = mutableStateOf("No model loaded")
     val busy = mutableStateOf(false)
     private var loadedSignature: String? = null
+    private var nextId = 1L
 
     /** Reload when the selected model or the active tool set changed. */
     private suspend fun ensureLoaded(): Boolean {
@@ -41,23 +44,38 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    private fun update(id: Long, f: (ChatMessage) -> ChatMessage) {
+        val i = messages.indexOfFirst { it.id == id }
+        if (i >= 0) messages[i] = f(messages[i])
+    }
+
     fun send(text: String) {
         if (text.isBlank() || busy.value) return
-        messages += ChatMessage("user", text)
-        val reply = ChatMessage("model", "")
-        messages += reply
+        messages += ChatMessage(nextId++, "user", text)
+        val replyId = nextId++
+        messages += ChatMessage(replyId, "model", "", streaming = true)
         busy.value = true
         viewModelScope.launch {
-            if (!ensureLoaded()) { reply.text = status.value; busy.value = false; return@launch }
-            val idx = messages.lastIndex
+            if (!ensureLoaded()) { update(replyId) { it.copy(text = status.value, streaming = false) }; busy.value = false; return@launch }
+            // Batch tokens: flush to the UI at most every 80 ms to avoid a recomposition per chunk.
+            val pending = StringBuilder()
+            var lastFlush = System.currentTimeMillis()
+            fun flush() {
+                if (pending.isEmpty()) return
+                val chunk = pending.toString(); pending.setLength(0)
+                update(replyId) { it.copy(text = it.text + chunk) }
+                lastFlush = System.currentTimeMillis()
+            }
             EngineHolder.get(app).send(PromptBuilder.withContext(app, text)).collect { ev ->
                 when (ev) {
-                    is ChatEvent.Token -> { reply.text += ev.text; messages[idx] = reply.copy() }
-                    is ChatEvent.ToolCall -> { reply.tools += "→ ${ev.name} ${ev.args.take(120)}"; messages[idx] = reply.copy(tools = reply.tools.toMutableList()) }
-                    is ChatEvent.ToolResult -> { reply.tools += "← ${ev.name}: ${ev.result.take(120)}"; messages[idx] = reply.copy(tools = reply.tools.toMutableList()) }
-                    is ChatEvent.Done -> status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s"
+                    is ChatEvent.Token -> { pending.append(ev.text); if (System.currentTimeMillis() - lastFlush > 80) flush() }
+                    is ChatEvent.ToolCall -> { flush(); update(replyId) { it.copy(tools = it.tools + "→ ${ev.name} ${ev.args.take(160)}") } }
+                    is ChatEvent.ToolResult -> { update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
+                    is ChatEvent.Done -> { flush(); status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s" }
                 }
             }
+            flush()
+            update(replyId) { it.copy(streaming = false) }
             busy.value = false
         }
     }
@@ -65,5 +83,4 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun clear() { messages.clear(); viewModelScope.launch { runCatching { EngineHolder.get(app).resetConversation() } } }
 
     fun unload() { viewModelScope.launch { EngineHolder.get(app).close(); loadedSignature = null; status.value = "No model loaded" } }
-
 }

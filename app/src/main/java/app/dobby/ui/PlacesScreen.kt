@@ -76,7 +76,8 @@ private fun AddRuleDialog(p: Place, onDismiss: () -> Unit, onAdd: (PlaceRule) ->
     var from by remember { mutableStateOf("8") }
     var to by remember { mutableStateOf("11") }
     var title by remember { mutableStateOf("Leaving for office?") }
-    var prompt by remember { mutableStateOf("The user just left ${p.label}. Ask if they want a cab or bike taxi to office and list the apps they can open.") }
+    var message by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
     val days = remember { mutableStateListOf(2, 3, 4, 5, 6) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Rule for ${p.label}") },
         text = {
@@ -85,12 +86,13 @@ private fun AddRuleDialog(p: Place, onDismiss: () -> Unit, onAdd: (PlaceRule) ->
                 Row { OutlinedTextField(from, { from = it }, label = { Text("From hour") }, modifier = Modifier.weight(1f)); Spacer(Modifier.width(8.dp)); OutlinedTextField(to, { to = it }, label = { Text("To hour") }, modifier = Modifier.weight(1f)) }
                 Row { for (d in 1..7) FilterChip(selected = d in days, onClick = { if (d in days) days.remove(d) else days.add(d) }, label = { Text(PlaceRule.DAY[d]!!.take(2)) }, modifier = Modifier.padding(end = 2.dp)) }
                 OutlinedTextField(title, { title = it }, label = { Text("Notification title") })
-                OutlinedTextField(prompt, { prompt = it }, label = { Text("Prompt for Dobby") }, maxLines = 4)
+                OutlinedTextField(message, { message = it }, label = { Text("Plain message (no model run)") })
+                OutlinedTextField(prompt, { prompt = it }, label = { Text("Or a prompt for Dobby to run with tools") }, maxLines = 4)
             }
         },
         confirmButton = {
-            TextButton(enabled = from.toIntOrNull() != null && to.toIntOrNull() != null && title.isNotBlank() && prompt.isNotBlank(), onClick = {
-                onAdd(PlaceRule(UUID.randomUUID().toString().take(8), if (exit) "exit" else "enter", days.toList(), from.toInt(), to.toInt(), title, prompt))
+            TextButton(enabled = from.toIntOrNull() != null && to.toIntOrNull() != null && title.isNotBlank() && (prompt.isNotBlank() || message.isNotBlank()), onClick = {
+                onAdd(PlaceRule(UUID.randomUUID().toString().take(8), if (exit) "exit" else "enter", days.toList(), from.toInt(), to.toInt(), title, prompt, message))
             }) { Text("Add") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })

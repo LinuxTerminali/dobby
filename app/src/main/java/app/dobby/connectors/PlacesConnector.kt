@@ -26,10 +26,10 @@ class PlacesConnector(private val context: Context) : Connector {
         ToolSpec("set", "Save or update a place. Omit lat/lng to use the phone's current location.",
             ToolSpec.schema(listOf(Triple("label", "string", "e.g. home, office"), Triple("lat", "number", "Latitude"), Triple("lng", "number", "Longitude"),
                 Triple("radius_m", "number", "Radius in metres. Default 150")), listOf("label"))),
-        ToolSpec("add_rule", "Run a prompt when entering or leaving a place inside a time window.",
+        ToolSpec("add_rule", "Do something when the user enters or leaves a saved place. Give message for a plain notification, or prompt if Dobby must check something with tools.",
             ToolSpec.schema(listOf(Triple("label", "string", "Place label"), Triple("event", "string", "enter or exit"),
                 Triple("days", "array", "Days 1=Sun..7=Sat; empty = any"), Triple("from_hour", "integer", "0-23, default 0"), Triple("to_hour", "integer", "1-24, default 24"),
-                Triple("title", "string", "Notification title"), Triple("prompt", "string", "What Dobby should do")), listOf("label", "event", "title", "prompt"))),
+                Triple("title", "string", "Notification title"), Triple("message", "string", "Plain notification text"), Triple("prompt", "string", "Optional: a question Dobby should answer with tools when it fires")), listOf("label", "event", "title"))),
         ToolSpec("events", "Recent enter/exit events.", ToolSpec.schema(listOf(Triple("days", "integer", "Look back. Default 7")))),
         ToolSpec("delete", "Delete a place by label.", ToolSpec.schema(listOf(Triple("label", "string", "Place label")), listOf("label"))),
     )
@@ -46,10 +46,10 @@ class PlacesConnector(private val context: Context) : Connector {
             p.toJson()
         }
         "add_rule" -> {
-            val p = store.byLabel(args.getString("label")) ?: throw IllegalArgumentException("no such place")
+            val p = store.byLabel(args.getString("label")) ?: throw IllegalArgumentException(noPlace(args.getString("label")))
             val d = args.optJSONArray("days") ?: JSONArray()
             val rule = PlaceRule(UUID.randomUUID().toString().take(8), args.getString("event"), (0 until d.length()).map { d.getInt(it) },
-                args.optInt("from_hour", 0), args.optInt("to_hour", 24), args.getString("title"), args.getString("prompt"))
+                args.optInt("from_hour", 0), args.optInt("to_hour", 24), args.getString("title"), args.optString("prompt"), args.optString("message"))
             store.upsert(p.copy(rules = p.rules + rule))
             rule.toJson()
         }
@@ -59,5 +59,11 @@ class PlacesConnector(private val context: Context) : Connector {
         }
         "delete" -> { val p = store.byLabel(args.getString("label")); if (p != null) { store.delete(p.id); geo.registerAll() }; JSONObject().put("deleted", p != null) }
         else -> throw IllegalArgumentException("unknown tool $tool")
+    }
+
+    private fun noPlace(label: String): String {
+        val known = store.all().map { it.label }
+        return "No saved place named '$label'. Saved places: ${if (known.isEmpty()) "none" else known.joinToString()}. " +
+            "Ask the user to say 'save this place as $label' when they are there (places.set uses the current location), or give lat/lng."
     }
 }

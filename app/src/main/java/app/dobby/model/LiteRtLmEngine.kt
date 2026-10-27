@@ -3,6 +3,7 @@ package app.dobby.model
 import android.content.Context
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -10,6 +11,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.OpenApiTool
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.tool
 import app.dobby.mcp.ToolSpec
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +53,8 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                 systemInstruction = Contents.of(systemPrompt),
                 tools = toolObjects.map { tool(it) },
                 samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
+                // Thinking off for speed on a phone; flip on if tool planning suffers.
+                thinkingConfig = ThinkingConfig(enableThinking = false),
             )
             conversation = engine!!.createConversation(config!!)
             loadedModel = entry
@@ -68,11 +72,12 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         val t0 = System.currentTimeMillis()
         toolObjects.forEach { it.sink = { ev -> trySend(ev) } }
         try {
-            conv.sendMessageAsync(userText).collect { item: Any ->
-                val t = when (item) {
-                    is String -> item
-                    else -> item.javaClass.getMethod("getText").invoke(item) as? String ?: item.toString()
-                }
+            // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
+            // only `channels` (thinking stream) have empty contents and are skipped.
+            conv.sendMessageAsync(userText).collect { msg ->
+                val t = msg.contents.contents
+                    .filterIsInstance<Content.Text>()
+                    .joinToString("") { it.text }
                 if (t.isNotEmpty()) trySend(ChatEvent.Token(t))
             }
             trySend(ChatEvent.Done(System.currentTimeMillis() - t0))

@@ -71,7 +71,7 @@ If "Allow exact alarms" shows in the Reminders tab, grant it; otherwise alarms f
 
 ## Known gaps
 - Browser is read-only fetch; no WebView automation yet.
-- Tool calls run through LiteRT-LM's automatic loop; no step cap yet (add in `McpOpenApiTool`).
+- Tool calls run through LiteRT-LM's automatic loop, which caps at 25 calls per message.
 - Streaming assumes each `Message` from `sendMessageAsync` is a delta; if it is cumulative, replace
   `+=` with assignment in `ChatViewModel`.
 - No scheduled background jobs yet (watchers from the design doc).
