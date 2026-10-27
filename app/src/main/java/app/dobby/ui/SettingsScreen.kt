@@ -25,8 +25,8 @@ fun SettingsScreen() {
     var updateMsg by remember { mutableStateOf("Build ${BuildConfig.VERSION_CODE} (${BuildConfig.VERSION_NAME})") }
     var downloaded by remember { mutableStateOf(false) }
     LaunchedEffect(release) { while (release != null && !downloaded) { delay(1000); downloaded = UpdateChecker.isDownloaded(ctx, release!!) } }
-    Column(Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState())) {
-        Text("Updates", style = MaterialTheme.typography.titleMedium)
+    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        SectionTitle("Updates")
         Text(updateMsg, style = MaterialTheme.typography.bodySmall)
         Row {
             TextButton(onClick = {
@@ -47,8 +47,7 @@ fun SettingsScreen() {
         }
         Text("If Play Protect blocks the install, use adb install -r from a computer.", style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(16.dp))
-        Text("Accounts", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        SectionTitle("Accounts")
         OutlinedTextField(hf, { hf = it; app.models.hfToken = it }, label = { Text("Hugging Face token (for gated Gemma models)") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(client, { client = it; app.connectors.googleAuth().clientId = it }, label = { Text("Google OAuth client id (Android type)") }, modifier = Modifier.fillMaxWidth())
@@ -56,7 +55,7 @@ fun SettingsScreen() {
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = { app.connectors.googleAuth().signOut() }) { Text("Sign out of Google") }
         Spacer(Modifier.height(24.dp))
-        Text("Notes", style = MaterialTheme.typography.titleMedium)
+        SectionTitle("Notes")
         Text("• Sideloaded app: before granting SMS or call-log permission, open App info → ⋮ → Allow restricted settings.\n" +
              "• Everything runs on the phone. Only the Google connectors and the browser tool use the network.\n" +
              "• Models download over Wi-Fi only.", style = MaterialTheme.typography.bodySmall)
