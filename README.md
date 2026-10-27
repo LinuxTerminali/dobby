@@ -11,6 +11,8 @@ Expect a round of compile fixes on the first CI run, most likely in `LiteRtLmEng
 (LiteRT-LM API surface) and Compose imports. Everything else is plain Android/Kotlin.
 
 ## Build and updates
+- Models: grant "All files access" (Models tab banner) and they live in `Download/Dobby/models`,
+  which survives uninstall. Without it they sit in the app's private folder and go with the app.
 - Debug builds are signed with the committed `app/debug.keystore` (standard Android debug password),
   so `adb install -r` upgrades in place. The first install after this change needs one uninstall.
 - Every push to `main` publishes a GitHub Release `build-N` with the APK; `N` is the app's versionCode.

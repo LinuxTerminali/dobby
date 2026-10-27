@@ -31,6 +31,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import app.dobby.App
 import app.dobby.eval.EvalRunner
 import app.dobby.model.ModelEntry
@@ -39,7 +42,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ModelsScreen() {
-    val app = LocalContext.current.applicationContext as App
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as App
     val scope = rememberCoroutineScope()
     var tick by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
@@ -51,6 +55,18 @@ fun ModelsScreen() {
     key(tick) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
+                if (!app.models.sharedAllowed()) {
+                    DobbyCard(highlighted = true) {
+                        Text("Keep models across reinstalls", style = MaterialTheme.typography.titleMedium)
+                        Hint("Models are in the app's private folder and are deleted on uninstall. Allow all files access to store them in Download/Dobby/models instead.")
+                        FilledTonalButton(onClick = {
+                            ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}")))
+                        }) { Text("Allow all files access") }
+                    }
+                } else {
+                    val moved = remember { app.models.migrateToShared() }
+                    if (moved > 0) Hint("Moved $moved model file(s) to Download/Dobby/models.")
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Hint("One model is loaded at a time. Gated Gemma files need a Hugging Face token (Settings).", Modifier.weight(1f))
                     TextButton(onClick = { showAdd = true }) { Text("Add by URL") }
