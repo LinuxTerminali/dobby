@@ -55,6 +55,11 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Tool results
+Every tool returns a `summary` sentence in human form (dates as "Sun 26 Oct, 9:01 PM", amounts with Indian
+grouping, durations as "10 min") plus the structured data. The model sees the summary first and copies it,
+instead of rewriting raw timestamps. `util/Fmt` is pure Kotlin and unit-tested.
+
 ## Tool routing
 `ToolRouter` picks 3–6 tools per turn from keyword groups (calls, sms, gmail, docs, web, device, reminders,
 places, memory); `memory.recall` is always included; no match → all tools. The system prompt holds only the

@@ -23,8 +23,8 @@ class MemoryConnector(private val store: MemoryStore) : Connector {
     )
 
     override suspend fun call(tool: String, args: JSONObject): JSONObject = when (tool) {
-        "remember" -> store.remember(args.getString("text"), args.optString("tags", ""), "model").toJson()
-        "recall" -> JSONObject().put("facts", JSONArray(store.recall(args.getString("query"), args.optInt("limit", 5)).map { it.toJson() }))
+        "remember" -> store.remember(args.getString("text"), args.optString("tags", ""), "model").let { it.toJson().put("summary", "Saved: \"${it.text}\" (id ${it.id}).") }
+        "recall" -> { val f = store.recall(args.getString("query"), args.optInt("limit", 5)); JSONObject().put("summary", if (f.isEmpty()) "No saved facts match." else f.joinToString(" ") { "\"${it.text}\" (id ${it.id})." }).put("facts", JSONArray(f.map { it.toJson() })) }
         "forget" -> JSONObject().put("deleted", store.forget(args.getLong("id")))
         "profile" -> JSONObject().put("profile", store.profile)
         else -> throw IllegalArgumentException("unknown tool $tool")

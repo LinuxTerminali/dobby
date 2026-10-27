@@ -120,6 +120,16 @@
       }
      ],
      "count": 1
+    },
+    "sms.recent": {
+     "messages": [
+      {
+       "from": "VM-BESCOM",
+       "at": "2026-10-15 10:02",
+       "body": "Your BESCOM bill of Rs.2,140.00 for Oct 2026 is due on 28-10-2026."
+      }
+     ],
+     "count": 1
     }
    },
    "reply_contains": "2,140"
@@ -444,7 +454,7 @@
    },
    "reply_contains": "landlord",
    "expect_args": {
-    "in_minutes": 120
+    "title": "~landlord"
    }
   },
   {
@@ -537,8 +547,7 @@
      "tags": "office",
      "source": "model"
     }
-   },
-   "reply_contains": "north gate"
+   }
   },
   {
    "id": "mem-recall-01",

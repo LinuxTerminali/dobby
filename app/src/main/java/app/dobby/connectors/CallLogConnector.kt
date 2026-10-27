@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.provider.CallLog
 import androidx.core.content.ContextCompat
 import app.dobby.mcp.ToolSpec
+import app.dobby.util.Fmt
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -47,14 +48,20 @@ class CallLogConnector(private val context: Context) : Connector {
             "with" -> rows.take(limit)
             else -> throw IllegalArgumentException("unknown tool $tool")
         }
-        return JSONObject().put("calls", JSONArray(out.map { it.toJson() })).put("count", out.size)
+        val summary = if (out.isEmpty()) "No calls found." else out.take(8).joinToString(" ") { it.sentence() } + if (out.size > 8) " (+${out.size - 8} more)" else ""
+        return JSONObject().put("summary", summary).put("calls", JSONArray(out.map { it.toJson() })).put("count", out.size)
     }
 
     private data class Row(val name: String?, val number: String, val type: Int, val date: Long, val seconds: Long) {
         fun toJson() = JSONObject()
             .put("name", name ?: JSONObject.NULL).put("number", number)
             .put("type", when (type) { CallLog.Calls.INCOMING_TYPE -> "incoming"; CallLog.Calls.OUTGOING_TYPE -> "outgoing"; CallLog.Calls.MISSED_TYPE -> "missed"; CallLog.Calls.REJECTED_TYPE -> "rejected"; else -> "other" })
-            .put("at", FMT.format(Date(date))).put("duration_s", seconds)
+            .put("at", Fmt.dateTime(date)).put("duration_s", seconds)
+        fun sentence(): String {
+            val who = name ?: number
+            val kind = when (type) { CallLog.Calls.INCOMING_TYPE -> "Incoming call from"; CallLog.Calls.OUTGOING_TYPE -> "Outgoing call to"; CallLog.Calls.MISSED_TYPE -> "Missed call from"; CallLog.Calls.REJECTED_TYPE -> "Rejected call from"; else -> "Call with" }
+            return "$kind $who on ${Fmt.dateTime(date)}" + (if (seconds > 0) ", ${Fmt.duration(seconds)}." else ".")
+        }
     }
 
     private fun query(since: Long, who: String?): List<Row> {
@@ -72,5 +79,4 @@ class CallLogConnector(private val context: Context) : Connector {
         return out
     }
 
-    companion object { private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US) }
 }

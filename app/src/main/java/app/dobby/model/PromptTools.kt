@@ -49,7 +49,8 @@ object PromptTools {
         Example: TOOL {"name":"calls.with","args":{"who":"Mom"}}
         You will then get a line starting with TOOL_RESULT; use it to answer in plain words, repeating names,
         numbers and dates exactly as they appear. Do not call a tool when none is needed. `*` marks a required argument.
-        Each message lists the tools available for that request. Use memory.remember only when the user asks you to
+        Each message lists the tools available for that request. If a result is empty or an error, try one other
+        relevant tool before saying you could not find it. Give only the arguments that apply; leave the rest out. Use memory.remember only when the user asks you to
         remember something or states a lasting fact about themselves (a place, an account, a preference); never for
         passing events such as what they spent or did today.
     """.trimIndent()
@@ -130,8 +131,13 @@ object PromptTools {
         return if (last.isNotEmpty() && !last.contains(' ')) buffer.substring(0, lineStart) else buffer
     }
 
-    fun resultMessage(name: String, result: JSONObject): String =
-        "TOOL_RESULT $name: " + result.toString().take(4000)
+    /** Summary line first (the model copies it), then the data for details. */
+    fun resultMessage(name: String, result: JSONObject): String {
+        val summary = result.optString("summary", "")
+        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(4000)
+        val data = JSONObject(result.toString()).apply { remove("summary") }.toString()
+        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(3000)
+    }
 
     const val CORRECTION = "That was not a valid tool call. Reply with exactly one line: TOOL {\"name\":\"<tool>\",\"args\":{...}} using a tool from the list, or answer the user directly."
 }

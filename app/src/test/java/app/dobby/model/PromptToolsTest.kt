@@ -82,6 +82,13 @@ class PromptToolsTest {
         assertEquals("hi", PromptTools.turnMessage("hi", emptyList()))
     }
 
+    @Test fun resultMessagePutsSummaryFirst() {
+        val r = JSONObject().put("summary", "Outgoing call to Mom on Sun 26 Oct, 8:00 PM, 10 min 0 s.").put("count", 1)
+        val m = PromptTools.resultMessage("calls.with", r)
+        assertTrue(m, m.startsWith("TOOL_RESULT calls.with: Outgoing call to Mom on Sun 26 Oct, 8:00 PM, 10 min 0 s.\nDATA: "))
+        assertFalse(m, m.substringAfter("DATA: ").contains("summary"))
+    }
+
     @Test fun resultMessageIsBounded() {
         val big = JSONObject().put("text", "x".repeat(10_000))
         assertTrue(PromptTools.resultMessage("web.fetch", big).length < 4100)

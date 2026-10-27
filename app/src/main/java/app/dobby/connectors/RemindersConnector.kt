@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import app.dobby.mcp.ToolSpec
+import app.dobby.util.Fmt
 import app.dobby.reminders.Reminder
 import app.dobby.reminders.ReminderScheduler
 import app.dobby.reminders.ReminderStore
@@ -25,7 +26,7 @@ class RemindersConnector(private val context: Context) : Connector {
     private val scheduler = ReminderScheduler(context)
 
     override fun tools() = listOf(
-        ToolSpec("create", "Create a reminder. Kinds: (a) place-based, 'when I reach/leave X' → place=X, event=enter|exit; (b) recurring → days (1=Sun..7=Sat; weekdays=[2,3,4,5,6]) + hour + minute; (c) one-off → in_minutes (e.g. 'in 2 hours' → 120) or at (local time 'YYYY-MM-DD HH:MM' or 'HH:MM' for today/tomorrow). title is the text to show.",
+        ToolSpec("create", "Create a reminder. Give title plus the fields for ONE kind only: (a) place-based, 'when I reach/leave X' → place, event=enter|exit; (b) recurring → days (1=Sun..7=Sat; weekdays=[2,3,4,5,6]), hour, minute; (c) one-off → in_minutes ('in 2 hours' → 120) or at ('HH:MM' or 'YYYY-MM-DD HH:MM').",
             ToolSpec.schema(listOf(
                 Triple("title", "string", "Short title"),
                 Triple("message", "string", "Body text. Optional"),
@@ -54,9 +55,12 @@ class RemindersConnector(private val context: Context) : Connector {
                 minute = if (days.isNotEmpty()) args.optInt("minute", 0) else cal.get(java.util.Calendar.MINUTE),
                 days = days, atMillis = at, prompt = args.optString("prompt"))
             store.upsert(r); scheduler.schedule(r)
-            JSONObject().put("id", r.id).put("scheduled", r.describe()).put("next", r.nextTrigger())
+            val next = r.nextTrigger()
+            JSONObject().put("summary", "Reminder \"${r.title}\" set: ${r.describe()}" + (next?.let { ", next on ${Fmt.dateTime(it)}." } ?: "."))
+                .put("id", r.id).put("scheduled", r.describe()).put("next", next)
         }
-        "list" -> JSONObject().put("reminders", JSONArray(store.all().map { it.toJson().put("when", it.describe()) }))
+        "list" -> { val all = store.all(); JSONObject().put("summary", if (all.isEmpty()) "No reminders." else all.joinToString(" ") { "\"${it.title}\" (id ${it.id}): ${it.describe()}${if (it.enabled) "" else ", off"}." })
+            .put("reminders", JSONArray(all.map { it.toJson().put("when", it.describe()) })) }
         "delete" -> { val id = args.getString("id"); scheduler.cancel(id); store.delete(id); JSONObject().put("deleted", id) }
         else -> throw IllegalArgumentException("unknown tool $tool")
     }
@@ -66,6 +70,7 @@ class RemindersConnector(private val context: Context) : Connector {
         val now = System.currentTimeMillis()
         args.optInt("in_minutes", 0).takeIf { it > 0 }?.let { return now + it * 60_000L }
         val at = args.optString("at", "").trim()
+        Fmt.relativeMinutes(at)?.let { return now + it * 60_000L }   // "2 hours", "in 30 min"
         if (at.isNotEmpty()) {
             val cal = java.util.Calendar.getInstance()
             val m = Regex("^(?:(\\d{4})-(\\d{2})-(\\d{2})[ T])?(\\d{1,2}):(\\d{2})$").find(at) ?: throw IllegalArgumentException("at must be 'YYYY-MM-DD HH:MM' or 'HH:MM'")
@@ -89,6 +94,6 @@ class RemindersConnector(private val context: Context) : Connector {
         val rule = app.dobby.location.PlaceRule(UUID.randomUUID().toString().take(8), event, emptyList(), 0, 24,
             args.getString("title"), args.optString("prompt"), args.optString("message").ifBlank { args.getString("title") })
         placeStore.upsert(p.copy(rules = p.rules + rule))
-        return JSONObject().put("id", rule.id).put("scheduled", "on $event ${p.label}").put("place", p.label)
+        return JSONObject().put("summary", "Reminder \"${rule.title}\" set for when you $event ${p.label}.").put("id", rule.id).put("scheduled", "on $event ${p.label}").put("place", p.label)
     }
 }

@@ -25,6 +25,7 @@ class DocsConnector(private val context: Context, private val auth: GoogleAuth) 
             val els = content.getJSONObject(i).optJSONObject("paragraph")?.optJSONArray("elements") ?: continue
             for (j in 0 until els.length()) sb.append(els.getJSONObject(j).optJSONObject("textRun")?.optString("content") ?: "")
         }
-        return JSONObject().put("title", doc.optString("title")).put("text", sb.toString().take(12000))
+        val text = sb.toString().take(12000)
+        return JSONObject().put("summary", "Document \"${doc.optString("title")}\": ${text.take(600)}").put("title", doc.optString("title")).put("text", text)
     }
 }
