@@ -32,7 +32,6 @@ class RemindersConnector(private val context: Context) : Connector {
                 Triple("hour", "integer", "0-23, for recurring"),
                 Triple("minute", "integer", "0-59, for recurring"),
                 Triple("days", "array", "Days of week as integers 1..7 (1=Sunday). Empty for one-off"),
-                Triple("at_epoch_millis", "integer", "One-off: absolute epoch millis (prefer in_minutes or at)"),
                 Triple("in_minutes", "integer", "One-off: minutes from now"),
                 Triple("at", "string", "One-off: local time 'YYYY-MM-DD HH:MM' or 'HH:MM'"),
                 Triple("place", "string", "Saved place label for a place-based reminder, e.g. office"),

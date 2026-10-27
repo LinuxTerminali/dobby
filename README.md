@@ -55,6 +55,12 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Tool routing
+`ToolRouter` picks 3–6 tools per turn from keyword groups (calls, sms, gmail, docs, web, device, reminders,
+places, memory); `memory.recall` is always included; no match → all tools. The system prompt holds only the
+protocol; the chosen catalog travels with each user message, so the cached prefix stays small. The chat trace
+shows `router: offered n/N`.
+
 ## Eval
 - `assets/golden.json`: 32 synthetic cases across calls, sms, gmail, docs, sheets, web, device, reminders, places,
   memory, general. Every tool call is answered from the case's `mocks`, so runs are deterministic and need no

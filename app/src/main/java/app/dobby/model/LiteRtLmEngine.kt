@@ -57,7 +57,7 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
             toolObjects = if (useNative) tools.map { McpOpenApiTool(it, executor) } else emptyList()
             promptTools = if (!useNative) tools else emptyList()
             promptExecutor = executor
-            val instruction = if (useNative || tools.isEmpty()) systemPrompt else systemPrompt + "\n\n" + PromptTools.protocol(tools)
+            val instruction = if (useNative || tools.isEmpty()) systemPrompt else systemPrompt + "\n\n" + PromptTools.protocol()
             config = ConversationConfig(
                 systemInstruction = Contents.of(instruction),
                 tools = toolObjects.map { tool(it) },
@@ -81,8 +81,8 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         val t0 = System.currentTimeMillis()
         toolObjects.forEach { it.sink = { ev -> trySend(ev) } }
 
-        /** Streams one model turn. Holds back any TOOL line; returns the full raw text. */
-        suspend fun stream(text: String, holdToolLine: Boolean): String {
+        /** Streams one model turn. Holds back anything that looks like a tool call; returns raw text and how much was shown. */
+        suspend fun stream(text: String, holdToolLine: Boolean): Pair<String, Int> {
             val buf = StringBuilder(); var shown = 0
             // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
             // only `channels` (thinking stream) have empty contents and are skipped.
@@ -91,10 +91,10 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                 val t = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                 if (t.isEmpty()) return@collect
                 buf.append(t)
-                val visible = if (holdToolLine) PromptTools.visiblePrefix(buf.toString()) else buf.toString()
+                val visible = if (holdToolLine) PromptTools.visiblePrefix(buf.toString(), final = false) else buf.toString()
                 if (visible.length > shown) { send(ChatEvent.Token(visible.substring(shown))); shown = visible.length }
             }
-            return buf.toString()
+            return buf.toString() to shown
         }
 
         try {
@@ -111,26 +111,27 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                 }
             } else {
                 // Prompt-based tool loop, capped at MAX_STEPS calls.
-                var next = userText
+                val offered = ToolRouter.route(userText, promptTools)
+                send(ChatEvent.ToolResult("router", "offered ${offered.size}/${promptTools.size}: " + offered.joinToString(", ") { it.name }))
+                var next = PromptTools.turnMessage(userText, offered)
                 var steps = 0
                 var corrected = false
                 while (true) {
-                    val raw = stream(next, holdToolLine = true)
-                    var call = PromptTools.parse(raw, promptTools)
-                    if (call == null && PromptTools.looksLikeCall(raw)) {
-                        if (!corrected) {
+                    val (raw, shown) = stream(next, holdToolLine = true)
+                    val call = PromptTools.parse(raw, promptTools)   // accept any known tool, not only the offered ones
+                    if (call == null) {
+                        if (PromptTools.looksLikeCall(raw) && !corrected) {
                             // Looked like a tool call but did not parse: one correction, then give up gracefully.
                             corrected = true
                             send(ChatEvent.ToolResult("runtime", "unparsed tool call; asking for a retry: " + raw.take(120)))
                             next = PromptTools.CORRECTION
                             continue
                         }
-                        send(ChatEvent.Token(PromptTools.visiblePrefix(raw).let { raw.substring(it.length) }))  // show what it wrote
-                    }
-                    if (call == null || steps >= PromptTools.MAX_STEPS) {
-                        if (call != null) send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]"))
+                        // Plain answer (or unfixable): flush whatever the hold-back kept.
+                        if (raw.length > shown) send(ChatEvent.Token(raw.substring(shown)))
                         break
                     }
+                    if (steps >= PromptTools.MAX_STEPS) { send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]")); break }
                     steps++
                     send(ChatEvent.ToolCall(call.name, call.args.toString()))
                     val result = try { promptExecutor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }

@@ -67,8 +67,47 @@ class PromptToolsTest {
         assertEquals("", PromptTools.visiblePrefix("<|tool_call>call:memory.recall(query: \"office\")"))
     }
 
+    @Test fun streamingHoldsTrailingSingleWord() {
+        assertEquals("", PromptTools.visiblePrefix("memory", final = false))
+        assertEquals("", PromptTools.visiblePrefix("memory.remember", final = false))
+        assertEquals("Sure. memory", PromptTools.visiblePrefix("Sure. memory", final = false))  // mid-line word: not a call start
+        assertEquals("Sure.\n", PromptTools.visiblePrefix("Sure.\nmemory", final = false))
+        assertEquals("You called Mom", PromptTools.visiblePrefix("You called Mom", final = false))
+        assertEquals("memory", PromptTools.visiblePrefix("memory", final = true))
+    }
+
+    @Test fun turnMessageCarriesCatalog() {
+        val m = PromptTools.turnMessage("hi", tools.take(1))
+        assertTrue(m.startsWith("Tools for this request:\n- calls.with(") && m.endsWith("\n\nhi"))
+        assertEquals("hi", PromptTools.turnMessage("hi", emptyList()))
+    }
+
     @Test fun resultMessageIsBounded() {
         val big = JSONObject().put("text", "x".repeat(10_000))
         assertTrue(PromptTools.resultMessage("web.fetch", big).length < 4100)
+    }
+}
+
+class ToolRouterTest {
+    private fun spec(n: String) = ToolSpec(n, "d", ToolSpec.schema(emptyList()))
+    private val all = listOf("calls.recent","calls.missed","calls.with","sms.search","sms.recent","gmail.search","gmail.read","docs.read","sheets.read",
+        "web.fetch","device.now","device.location","reminders.create","reminders.list","reminders.delete",
+        "places.list","places.set","places.add_rule","places.events","places.delete","memory.remember","memory.recall","memory.forget","memory.profile").map(::spec)
+
+    @Test fun routesByKeyword() {
+        val names = ToolRouter.route("Did I miss any calls this week?", all).map { it.name }
+        assertTrue(names.toString(), "calls.missed" in names && "memory.recall" in names && "web.fetch" !in names)
+        assertTrue(ToolRouter.route("Remind me to eat an apple when I reach office", all).map { it.name }.containsAll(listOf("reminders.create", "places.list")))
+        assertEquals(listOf("web.fetch", "memory.recall"), ToolRouter.route("Summarise this page: https://example.com/x", all).map { it.name })
+    }
+
+    @Test fun fallsBackToAllWhenNothingMatches() {
+        assertEquals(all.size, ToolRouter.route("hello", all).size)
+        assertEquals(all.size, ToolRouter.route("what can you do?", all).size)
+    }
+
+    @Test fun keywordsMatchWholeWords() {
+        assertTrue(ToolRouter.groupsFor("I called Mom").contains("calls"))
+        assertFalse(ToolRouter.groupsFor("recall the plan").contains("calls"))
     }
 }

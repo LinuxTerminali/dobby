@@ -41,15 +41,22 @@ object PromptTools {
         "- ${t.name}($params) — ${t.description.take(160)}"
     }
 
-    fun protocol(tools: List<ToolSpec>): String = """
+    /** System-prompt part: the rules only. The catalog travels with each user message (see [turnMessage]). */
+    fun protocol(): String = """
         You can answer directly, do arithmetic, and extract or reformat text the user gives you without any tool.
         When you need information or an action from the phone, use a tool: reply with exactly one line and nothing else:
         TOOL {"name":"<tool>","args":{...}}
         Example: TOOL {"name":"calls.with","args":{"who":"Mom"}}
         You will then get a line starting with TOOL_RESULT; use it to answer in plain words, repeating names,
         numbers and dates exactly as they appear. Do not call a tool when none is needed. `*` marks a required argument.
-        ${catalog(tools)}
+        Each message lists the tools available for that request. Use memory.remember only when the user asks you to
+        remember something or states a lasting fact about themselves (a place, an account, a preference); never for
+        passing events such as what they spent or did today.
     """.trimIndent()
+
+    /** The user turn with the tools offered for it. */
+    fun turnMessage(userText: String, offered: List<ToolSpec>): String =
+        if (offered.isEmpty()) userText else "Tools for this request:\n${catalog(offered)}\n\n$userText"
 
     /** True when the text contains something that looks like an attempted tool call. */
     fun looksLikeCall(text: String) = HOLD.containsMatchIn(text)
@@ -110,10 +117,17 @@ object PromptTools {
         return out
     }
 
-    /** Text safe to show so far: everything before the first line that starts like a tool call. */
-    fun visiblePrefix(buffer: String): String {
-        val i = HOLD.find(buffer)?.range?.first ?: return buffer
-        return buffer.substring(0, i)
+    /**
+     * Text safe to show so far: everything before the first line that starts like a tool call.
+     * While streaming (final = false) a trailing line that is still a single word is held too,
+     * because "memory" + ".remember" + "(" arrive as separate chunks.
+     */
+    fun visiblePrefix(buffer: String, final: Boolean = true): String {
+        HOLD.find(buffer)?.let { return buffer.substring(0, it.range.first) }
+        if (final) return buffer
+        val lineStart = buffer.lastIndexOf('\n') + 1
+        val last = buffer.substring(lineStart)
+        return if (last.isNotEmpty() && !last.contains(' ')) buffer.substring(0, lineStart) else buffer
     }
 
     fun resultMessage(name: String, result: JSONObject): String =
