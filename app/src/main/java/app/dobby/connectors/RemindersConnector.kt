@@ -25,14 +25,16 @@ class RemindersConnector(private val context: Context) : Connector {
     private val scheduler = ReminderScheduler(context)
 
     override fun tools() = listOf(
-        ToolSpec("create", "Create a reminder. Three kinds: (a) place-based, 'when I reach/leave X' → place=X, event=enter|exit; (b) recurring at a time → days (1=Sun..7=Sat) + hour + minute; (c) one-off → at_epoch_millis. Use message for the text to show. Only add prompt if Dobby must look something up when it fires.",
+        ToolSpec("create", "Create a reminder. Kinds: (a) place-based, 'when I reach/leave X' → place=X, event=enter|exit; (b) recurring → days (1=Sun..7=Sat; weekdays=[2,3,4,5,6]) + hour + minute; (c) one-off → in_minutes (e.g. 'in 2 hours' → 120) or at (local time 'YYYY-MM-DD HH:MM' or 'HH:MM' for today/tomorrow). title is the text to show.",
             ToolSpec.schema(listOf(
                 Triple("title", "string", "Short title"),
                 Triple("message", "string", "Body text. Optional"),
                 Triple("hour", "integer", "0-23, for recurring"),
                 Triple("minute", "integer", "0-59, for recurring"),
                 Triple("days", "array", "Days of week as integers 1..7 (1=Sunday). Empty for one-off"),
-                Triple("at_epoch_millis", "integer", "Trigger time for a one-off reminder"),
+                Triple("at_epoch_millis", "integer", "One-off: absolute epoch millis (prefer in_minutes or at)"),
+                Triple("in_minutes", "integer", "One-off: minutes from now"),
+                Triple("at", "string", "One-off: local time 'YYYY-MM-DD HH:MM' or 'HH:MM'"),
                 Triple("place", "string", "Saved place label for a place-based reminder, e.g. office"),
                 Triple("event", "string", "enter or exit, for a place-based reminder"),
                 Triple("prompt", "string", "Optional question to run with tools at trigger time")), listOf("title"))),
@@ -44,8 +46,8 @@ class RemindersConnector(private val context: Context) : Connector {
         "create" -> if (args.optString("place").isNotBlank()) createPlaceReminder(args) else {
             val daysArr = args.optJSONArray("days") ?: JSONArray()
             val days = (0 until daysArr.length()).map { daysArr.getInt(it) }.filter { it in 1..7 }
-            val at = args.optLong("at_epoch_millis", 0)
-            require(days.isNotEmpty() || at > System.currentTimeMillis()) { "give days+hour+minute for recurring, a future at_epoch_millis for one-off, or place+event for place-based" }
+            val at = resolveAt(args)
+            require(days.isNotEmpty() || at > System.currentTimeMillis()) { "give days+hour+minute for recurring; in_minutes or at for one-off; place+event for place-based" }
             val cal = java.util.Calendar.getInstance().apply { if (at > 0) timeInMillis = at }
             val r = Reminder(
                 id = UUID.randomUUID().toString().take(8), title = args.getString("title"), message = args.optString("message"),
@@ -58,6 +60,23 @@ class RemindersConnector(private val context: Context) : Connector {
         "list" -> JSONObject().put("reminders", JSONArray(store.all().map { it.toJson().put("when", it.describe()) }))
         "delete" -> { val id = args.getString("id"); scheduler.cancel(id); store.delete(id); JSONObject().put("deleted", id) }
         else -> throw IllegalArgumentException("unknown tool $tool")
+    }
+
+    /** One-off time from in_minutes, at ('YYYY-MM-DD HH:MM' or 'HH:MM', next occurrence), or at_epoch_millis. */
+    private fun resolveAt(args: JSONObject): Long {
+        val now = System.currentTimeMillis()
+        args.optInt("in_minutes", 0).takeIf { it > 0 }?.let { return now + it * 60_000L }
+        val at = args.optString("at", "").trim()
+        if (at.isNotEmpty()) {
+            val cal = java.util.Calendar.getInstance()
+            val m = Regex("^(?:(\\d{4})-(\\d{2})-(\\d{2})[ T])?(\\d{1,2}):(\\d{2})$").find(at) ?: throw IllegalArgumentException("at must be 'YYYY-MM-DD HH:MM' or 'HH:MM'")
+            val (y, mo, d, h, mi) = m.destructured
+            if (y.isNotEmpty()) cal.set(y.toInt(), mo.toInt() - 1, d.toInt())
+            cal.set(java.util.Calendar.HOUR_OF_DAY, h.toInt()); cal.set(java.util.Calendar.MINUTE, mi.toInt()); cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+            if (y.isEmpty() && cal.timeInMillis <= now) cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+            return cal.timeInMillis
+        }
+        return args.optLong("at_epoch_millis", 0)
     }
 
     /** "Remind me to X when I reach office" → a plain-message rule on the place. */

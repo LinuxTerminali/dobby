@@ -111,12 +111,22 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                 }
             } else {
                 // Prompt-based tool loop, capped at MAX_STEPS calls.
-                val offered = promptTools.map { it.name }.toSet()
                 var next = userText
                 var steps = 0
+                var corrected = false
                 while (true) {
                     val raw = stream(next, holdToolLine = true)
-                    val call = PromptTools.parse(raw, offered)
+                    var call = PromptTools.parse(raw, promptTools)
+                    if (call == null && PromptTools.looksLikeCall(raw)) {
+                        if (!corrected) {
+                            // Looked like a tool call but did not parse: one correction, then give up gracefully.
+                            corrected = true
+                            send(ChatEvent.ToolResult("runtime", "unparsed tool call; asking for a retry: " + raw.take(120)))
+                            next = PromptTools.CORRECTION
+                            continue
+                        }
+                        send(ChatEvent.Token(PromptTools.visiblePrefix(raw).let { raw.substring(it.length) }))  // show what it wrote
+                    }
                     if (call == null || steps >= PromptTools.MAX_STEPS) {
                         if (call != null) send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]"))
                         break

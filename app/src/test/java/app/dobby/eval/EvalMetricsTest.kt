@@ -56,6 +56,18 @@ class EvalMetricsTest {
         assertTrue(unknown.unknownTool)
     }
 
+    @Test fun extraNumbersWhitelistDerivedValues() {
+        val (ok, _) = EvalMetrics.grounded("Total is Rs. 995.00", listOf("640.00 355.00"), setOf("995"))
+        assertTrue(ok)
+    }
+
+    @Test fun expectIncludesAcceptsAnyOrder() {
+        val case = JSONObject("""{"id":"p","group":"places","prompt":"save as office","expect_includes":["places.set"],"expect_args":{"label":"~office"}}""")
+        val r = EvalMetrics.score(case, listOf("device.location" to JSONObject(), "places.set" to JSONObject("""{"label":"office"}""")),
+            setOf("device.location", "places.set"), "Saved office.", 1, 2, emptyList())
+        assertTrue(r.pass)
+    }
+
     @Test fun csvRowQuotesCommas() {
         val r = EvalMetrics.CaseResult("a","g",true,true,true,false,true,true,emptySet(), listOf("x.y","z.w"),1,2,3,"r, with comma")
         val row = EvalMetrics.csvRow(r)
@@ -74,8 +86,8 @@ class EvalMetricsTest {
             val c = cases.getJSONObject(i)
             assertTrue("duplicate id ${c.getString("id")}", ids.add(c.getString("id")))
             assertTrue(c.getString("prompt").isNotBlank())
-            val t = c.optString("expect_tool", "")
-            if (t.isNotEmpty()) {
+            val inc = c.optJSONArray("expect_includes")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+            for (t in listOf(c.optString("expect_tool", "")).filter { it.isNotEmpty() } + inc) {
                 assertTrue("unknown tool $t in ${c.getString("id")}", t in known)
                 assertTrue("missing mock for $t in ${c.getString("id")}", c.optJSONObject("mocks")?.has(t) == true)
             }

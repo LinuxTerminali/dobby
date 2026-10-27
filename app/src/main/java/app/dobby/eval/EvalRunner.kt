@@ -28,6 +28,7 @@ class EvalRunner(private val app: App) {
         val entry = app.models.withBackend(requested)
         val golden = JSONObject(app.assets.open("golden.json").bufferedReader().readText())
         val cases = golden.getJSONArray("cases")
+        val places = golden.optJSONObject("settings")?.optJSONArray("places")?.let { a -> (0 until a.length()).map { a.getString(it) } }
         val tools = app.connectors.all.flatMap { s -> s.tools().map { t -> t.copy(name = "${s.id}.${t.name}") } }
         val offered = tools.map { it.name }.toSet()
         val engine = EngineHolder.get(app)
@@ -41,7 +42,7 @@ class EvalRunner(private val app: App) {
             currentMocks.optJSONObject(name) ?: JSONObject().put("error", "no mock for $name in this case")
         }
         val t0 = System.currentTimeMillis()
-        engine.load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }),
+        engine.load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }, places),
             nativeTools = app.models.toolMode == "native")
         val loadMs = System.currentTimeMillis() - t0
 
@@ -76,7 +77,7 @@ class EvalRunner(private val app: App) {
             "\ntools ${app.models.toolMode} · backend ${engine.loadedBackend} · load ${loadMs} ms · pss ${pssMb} MB · battery ${(chargeStart - chargeEnd) / 1000} mAh · ${app.models.fileFor(entry).name}"
         val txt = File(dir, "$tag.txt")
         txt.writeText(summary + "\n\n" + results.filter { !it.pass }.joinToString("\n") {
-            "FAIL ${it.id}: calls=${it.calls} bad=${it.badNumbers} reply=${it.reply.take(160).replace('\n', ' ')}" })
+            "FAIL ${it.id}: calls=${it.calls} args=${it.firstArgs.take(120)} bad=${it.badNumbers} reply=${it.reply.take(160).replace('\n', ' ')}" })
         exportToDownloads(listOf(csv, txt))
         return Run(summary, csv, results)
     }

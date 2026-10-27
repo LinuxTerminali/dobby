@@ -149,7 +149,10 @@
      "count": 2
     }
    },
-   "reply_contains": "995"
+   "reply_contains": "995",
+   "extra_numbers": [
+    "995"
+   ]
   },
   {
    "id": "sms-recent-01",
@@ -434,15 +437,20 @@
      "id": "r4",
      "scheduled": "once",
      "next": 1761540000000
+    },
+    "device.now": {
+     "now": "Tuesday 2026-10-27 21:30"
     }
    },
-   "reply_contains": "landlord"
+   "reply_contains": "landlord",
+   "expect_args": {
+    "in_minutes": 120
+   }
   },
   {
    "id": "places-set-01",
    "group": "places",
    "prompt": "Save this place as office",
-   "expect_tool": "places.set",
    "expect_args": {
     "label": "~office"
    },
@@ -453,9 +461,17 @@
      "lat": 12.9189,
      "lng": 77.6756,
      "radius_m": 150
+    },
+    "device.location": {
+     "lat": 12.9189,
+     "lng": 77.6756,
+     "age_min": 2
     }
    },
-   "reply_contains": "office"
+   "reply_contains": "office",
+   "expect_includes": [
+    "places.set"
+   ]
   },
   {
    "id": "places-list-01",
@@ -571,5 +587,11 @@
    "prompt": "what can you do?",
    "no_tool": true
   }
- ]
+ ],
+ "settings": {
+  "places": [
+   "home",
+   "office"
+  ]
+ }
 }
