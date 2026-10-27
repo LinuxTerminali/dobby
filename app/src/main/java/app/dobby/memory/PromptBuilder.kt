@@ -1,12 +1,14 @@
 package app.dobby.memory
 
 import app.dobby.App
+import app.dobby.location.PlaceStore
 
 /** Builds the system prompt (profile + rules) and per-message context (relevant facts). */
 object PromptBuilder {
     fun system(app: App, toolNames: List<String>): String {
         val profile = app.memory.profile.ifBlank { "(no profile set)" }
-        val places = app.dobby.location.PlaceStore(app).all().map { it.label }.ifEmpty { listOf("none saved") }.joinToString()
+        val labels: List<String> = PlaceStore(app).all().map { it.label }
+        val places = if (labels.isEmpty()) "none saved" else labels.joinToString()
         return """
             You are Dobby, a private assistant running on the user's phone in India. Be brief and plain.
             Use tools to look things up before answering; never invent amounts, dates or names.
