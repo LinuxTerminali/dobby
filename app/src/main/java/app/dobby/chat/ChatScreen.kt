@@ -25,7 +25,7 @@ fun ChatScreen(vm: ChatViewModel = viewModel()) {
             TextButton(onClick = { vm.unload() }) { Text("Unload") }
         }
         LazyColumn(state = list, modifier = Modifier.weight(1f)) {
-            items(vm.messages) { m ->
+            items(vm.messages, key = { it.id }) { m ->
                 val user = m.role == "user"
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
@@ -34,7 +34,7 @@ fun ChatScreen(vm: ChatViewModel = viewModel()) {
                         Column(Modifier.padding(10.dp)) {
                             m.tools.forEach { Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace) }
                             if (m.tools.isNotEmpty()) Spacer(Modifier.height(4.dp))
-                            Text(if (m.text.isEmpty() && !user) "…" else m.text)
+                            Text(if (m.text.isEmpty() && m.streaming) "…" else m.text)
                         }
                     }
                 }

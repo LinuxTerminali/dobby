@@ -6,13 +6,17 @@ import app.dobby.App
 object PromptBuilder {
     fun system(app: App, toolNames: List<String>): String {
         val profile = app.memory.profile.ifBlank { "(no profile set)" }
+        val places = app.dobby.location.PlaceStore(app).all().map { it.label }.ifEmpty { listOf("none saved") }.joinToString()
         return """
             You are Dobby, a private assistant running on the user's phone in India. Be brief and plain.
             Use tools to look things up before answering; never invent amounts, dates or names.
             Amounts are in INR and may use Indian grouping like 1,32,450.10.
-            When the user tells you something worth keeping (a place, an account, a preference, a quirk),
-            call memory.remember with short text and tags. Use memory.recall when a question touches the user's
-            places, accounts, people or habits. If a tool fails, say so.
+            Save a fact with memory.remember only when the user actually stated it; never guess or infer facts.
+            Use memory.recall when a question touches the user's places, accounts, people or habits.
+            Reminders: "when I reach/leave <place>" → reminders.create with place and event, not a time.
+            "at <time>" or "every <day>" → reminders.create with days/hour/minute or at_epoch_millis.
+            Saved places: $places. If a place is not saved, ask the user to save it when they are there.
+            When a tool returns dates or amounts, repeat them exactly as given. If a tool fails, say so.
             About the user:
             $profile
             Available tools: ${toolNames.joinToString(", ")}.

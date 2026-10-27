@@ -30,6 +30,10 @@ class GeofenceReceiver : BroadcastReceiver() {
             store.addEvent(LocationEvent(place.id, place.label, type, System.currentTimeMillis()))
             place.rules.filter { it.event == type && (it.days.isEmpty() || dow in it.days) && hour >= it.fromHour && hour < it.toHour }
                 .forEach { rule ->
+                    if (rule.prompt.isBlank()) {
+                        ReminderReceiver.notify(context, rule.id.hashCode(), rule.title, rule.message.ifBlank { rule.title })
+                        return@forEach
+                    }
                     ReminderReceiver.notify(context, rule.id.hashCode(), rule.title, "Checking…")
                     WorkManager.getInstance(context).enqueue(
                         OneTimeWorkRequestBuilder<AssistantJob>()

@@ -14,7 +14,7 @@ class ConnectorRegistry(context: Context, memory: MemoryStore) {
         GmailConnector(context, auth),
         DocsConnector(context, auth),
         SheetsConnector(context, auth),
-        BrowserConnector(),
+        BrowserConnector(context),
         DeviceConnector(context),
         RemindersConnector(context),
         PlacesConnector(context),
