@@ -10,7 +10,11 @@ First cut, **not yet compiled**: this tree was written without an Android SDK at
 Expect a round of compile fixes on the first CI run, most likely in `LiteRtLmEngine.kt`
 (LiteRT-LM API surface) and Compose imports. Everything else is plain Android/Kotlin.
 
-## Build
+## Build and updates
+- Debug builds are signed with the committed `app/debug.keystore` (standard Android debug password),
+  so `adb install -r` upgrades in place. The first install after this change needs one uninstall.
+- Every push to `main` publishes a GitHub Release `build-N` with the APK; `N` is the app's versionCode.
+  Settings → Check for updates downloads it. Play Protect may block the install; ADB never is.
 - CI: `.github/workflows/android.yml` builds `app-debug.apk` on push to `main`
   (no Gradle wrapper needed; it uses `gradle/actions/setup-gradle`).
 - Local: Android Studio, or `gradle wrapper && ./gradlew assembleDebug`.
