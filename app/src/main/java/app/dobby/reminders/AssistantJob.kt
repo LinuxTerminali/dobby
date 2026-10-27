@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.dobby.App
+import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
@@ -23,7 +24,7 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
         val entry = app.models.all().firstOrNull { it.id == app.models.selectedId } ?: return fail(app, notifId, title, "no model selected")
         if (!app.models.isDownloaded(entry)) return fail(app, notifId, title, "model not downloaded")
         val engine = EngineHolder.get(app)
-        app.dobby.model.Approvals.headless = true
+        Approvals.headless = true
         return try {
             val tools = app.router.listTools()
             engine.load(entry, app.models.fileFor(entry).absolutePath, tools,
@@ -36,7 +37,7 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
         } catch (e: Exception) {
             fail(app, notifId, title, e.message ?: e.toString())
         } finally {
-            app.dobby.model.Approvals.headless = false
+            Approvals.headless = false
             runCatching { engine.close() }
         }
     }

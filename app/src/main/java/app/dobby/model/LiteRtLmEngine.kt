@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.OpenApiTool
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.tool
+import app.dobby.mcp.Effect
 import app.dobby.mcp.ToolSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -138,7 +139,7 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                     if (steps >= PromptTools.MAX_STEPS) { send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]")); break }
                     steps++
                     send(ChatEvent.ToolCall(call.name, call.args.toString()))
-                    val effect = promptTools.firstOrNull { it.name == call.name }?.effect ?: app.dobby.mcp.Effect.READ
+                    val effect = promptTools.firstOrNull { it.name == call.name }?.effect ?: Effect.READ
                     val decision = Approvals.preDecide(effect, alwaysAllowed(call.name))
                         ?: Approvals.request(call.name, call.args, emit = { id -> send(ChatEvent.Confirm(id, call.name, call.args.toString())) })
                     val result = if (decision == Approvals.Decision.DENY) JSONObject().put("error", "The user did not approve this action. Do not retry it; tell the user it was not done.")
