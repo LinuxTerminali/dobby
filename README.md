@@ -47,6 +47,17 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
              that wakes the model for reminders that carry a prompt
 ```
 
+## Eval
+- `assets/golden.json`: 32 synthetic cases across calls, sms, gmail, docs, sheets, web, device, reminders, places,
+  memory, general. Every tool call is answered from the case's `mocks`, so runs are deterministic and need no
+  permissions or network. Real data never goes in this file.
+- Run from the app (Models → Run eval) or from a computer: `scripts/eval.sh [model-id]`.
+- Output: `eval/<model>-<stamp>.csv` (per-case metrics) and `.txt` (summary + failures) under the app's files dir.
+- Metrics: first tool correct, args match, trajectory match, calls to tools not offered, reply contains, numbers
+  grounded in prompt/tool output, time to first token, total latency, load time, PSS, battery.
+- `EvalMetrics` is pure Kotlin and unit-tested (`./gradlew testDebugUnitTest`, also run in CI before the APK build).
+- Record the baseline score in a PR before changing the router, prompts or model.
+
 ## Add a connector
 Implement `Connector` (id, title, requirement, `tools()`, `call()`), add it to
 `ConnectorRegistry.all`. Tools appear to the model as `<id>.<tool>`.

@@ -76,7 +76,12 @@ fun ModelsScreen() {
             items(app.models.all()) { m ->
                 ModelCard(m, onChanged = { tick++ }, evalBusy = evalBusy, onEval = {
                     evalBusy = true; evalOut = "Running eval…"
-                    scope.launch { evalOut = runCatching { EvalRunner(app).run(m) }.getOrElse { "eval failed: ${it.message}" }; evalBusy = false }
+                    scope.launch {
+                        evalOut = runCatching { EvalRunner(app).run(m) { p -> evalOut = "Eval $p" } }
+                            .map { it.summary + "\nCSV: ${it.csv.name} (adb pull /sdcard/Android/data/app.dobby/files/eval/)" }
+                            .getOrElse { "eval failed: ${it.message}" }
+                        evalBusy = false
+                    }
                 })
             }
             item { Spacer(Modifier.height(24.dp)) }

@@ -47,6 +47,9 @@
         </provider>
 
         <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".eval.EvalReceiver" android:exported="true">
+            <intent-filter><action android:name="app.dobby.EVAL" /></intent-filter>
+        </receiver>
         <receiver android:name=".location.GeofenceReceiver" android:exported="true" />
         <receiver android:name=".reminders.BootReceiver" android:exported="true">
             <intent-filter>

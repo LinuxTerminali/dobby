@@ -63,6 +63,10 @@ dependencies {
     // Local LLM runtime. Pin to a tested version after the first green build.
     implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
 
+    // JVM unit tests (real org.json instead of the Android stub)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+
     // OAuth (PKCE) for Google connectors
     implementation("net.openid:appauth:0.11.1")
 }
