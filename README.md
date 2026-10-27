@@ -47,6 +47,14 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
              that wakes the model for reminders that carry a prompt
 ```
 
+## Tool calling modes
+- `prompt` (default): the model gets a compact tool catalog in the system prompt and replies with one
+  `TOOL {"name":…,"args":{…}}` line; the app parses it, runs the connector, feeds `TOOL_RESULT` back,
+  loops up to 5 times. The runtime sees a plain conversation.
+- `native`: LiteRT-LM's own tool path. On a Pixel 9 with Gemma 4 E4B this corrupted digits and ids
+  in replies and tool arguments (deterministic, both backends); kept only for comparison.
+  Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
+
 ## Eval
 - `assets/golden.json`: 32 synthetic cases across calls, sms, gmail, docs, sheets, web, device, reminders, places,
   memory, general. Every tool call is answered from the case's `mocks`, so runs are deterministic and need no

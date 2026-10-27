@@ -47,6 +47,15 @@ fun SettingsScreen() {
         }
         Text("If Play Protect blocks the install, use adb install -r from a computer.", style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(16.dp))
+        SectionTitle("Tool calling")
+        var mode by remember { mutableStateOf(app.models.toolMode) }
+        Row {
+            listOf("prompt" to "Prompt (app parses TOOL lines)", "native" to "Native (runtime)").forEach { (v, label) ->
+                FilterChip(selected = mode == v, onClick = { mode = v; app.models.toolMode = v }, label = { Text(label) }, modifier = Modifier.padding(end = 8.dp))
+            }
+        }
+        Hint("Prompt mode avoids the runtime's tool path, which corrupted digits in testing. Switch to Native only to compare.")
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Accounts")
         OutlinedTextField(hf, { hf = it; app.models.hfToken = it }, label = { Text("Hugging Face token (for gated Gemma models)") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))

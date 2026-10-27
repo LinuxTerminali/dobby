@@ -40,7 +40,10 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     override var loadedBackend: String? = null
         private set
 
-    override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String) =
+    private var promptTools: List<ToolSpec> = emptyList()
+    private var promptExecutor: ToolExecutor? = null
+
+    override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean) =
         withContext(Dispatchers.IO) {
             close()
             val wantGpu = entry.backend.equals("gpu", ignoreCase = true)
@@ -50,9 +53,13 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                 Log.w(TAG, "backend ${entry.backend} failed, falling back to CPU: ${e.message}")
                 if (wantGpu) open(modelPath, Backend.CPU()).also { loadedBackend = "CPU (fallback)" } else throw e
             }
-            toolObjects = if (entry.supportsTools) tools.map { McpOpenApiTool(it, executor) } else emptyList()
+            val useNative = nativeTools && entry.supportsTools
+            toolObjects = if (useNative) tools.map { McpOpenApiTool(it, executor) } else emptyList()
+            promptTools = if (!useNative) tools else emptyList()
+            promptExecutor = executor
+            val instruction = if (useNative || tools.isEmpty()) systemPrompt else systemPrompt + "\n\n" + PromptTools.protocol(tools)
             config = ConversationConfig(
-                systemInstruction = Contents.of(systemPrompt),
+                systemInstruction = Contents.of(instruction),
                 tools = toolObjects.map { tool(it) },
                 samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
                 // Thinking off for speed on a phone; flip on if tool planning suffers.
@@ -73,25 +80,53 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         val conv = conversation ?: run { close(); return@callbackFlow }
         val t0 = System.currentTimeMillis()
         toolObjects.forEach { it.sink = { ev -> trySend(ev) } }
-        suspend fun stream(text: String) {
+
+        /** Streams one model turn. Holds back any TOOL line; returns the full raw text. */
+        suspend fun stream(text: String, holdToolLine: Boolean): String {
+            val buf = StringBuilder(); var shown = 0
             // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
             // only `channels` (thinking stream) have empty contents and are skipped.
             // `send` (not trySend) so a slow collector applies backpressure instead of dropping chunks.
             conv.sendMessageAsync(text).collect { msg ->
                 val t = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
-                if (t.isNotEmpty()) send(ChatEvent.Token(t))
+                if (t.isEmpty()) return@collect
+                buf.append(t)
+                val visible = if (holdToolLine) PromptTools.visiblePrefix(buf.toString()) else buf.toString()
+                if (visible.length > shown) { send(ChatEvent.Token(visible.substring(shown))); shown = visible.length }
             }
+            return buf.toString()
         }
+
         try {
-            try {
-                stream(userText)
-            } catch (e: Exception) {
-                // The model emitted a tool call the runtime could not parse: ask once for a clean retry.
-                if (e.message?.contains("parse tool call", ignoreCase = true) == true) {
-                    Log.w(TAG, "malformed tool call, retrying once: ${e.message}")
-                    send(ChatEvent.ToolResult("runtime", "malformed tool call; retrying"))
-                    stream("Your last tool call was malformed. Call the tool again with all string arguments in double quotes, or answer without a tool.")
-                } else throw e
+            if (promptTools.isEmpty()) {
+                try {
+                    stream(userText, holdToolLine = false)
+                } catch (e: Exception) {
+                    // Native tool path: the model emitted a call the runtime could not parse; one clean retry.
+                    if (e.message?.contains("parse tool call", ignoreCase = true) == true) {
+                        Log.w(TAG, "malformed tool call, retrying once: ${e.message}")
+                        send(ChatEvent.ToolResult("runtime", "malformed tool call; retrying"))
+                        stream("Your last tool call was malformed. Call the tool again with all string arguments in double quotes, or answer without a tool.", false)
+                    } else throw e
+                }
+            } else {
+                // Prompt-based tool loop, capped at MAX_STEPS calls.
+                val offered = promptTools.map { it.name }.toSet()
+                var next = userText
+                var steps = 0
+                while (true) {
+                    val raw = stream(next, holdToolLine = true)
+                    val call = PromptTools.parse(raw, offered)
+                    if (call == null || steps >= PromptTools.MAX_STEPS) {
+                        if (call != null) send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]"))
+                        break
+                    }
+                    steps++
+                    send(ChatEvent.ToolCall(call.name, call.args.toString()))
+                    val result = try { promptExecutor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }
+                    send(ChatEvent.ToolResult(call.name, result.toString().take(600)))
+                    next = PromptTools.resultMessage(call.name, result)
+                }
             }
             send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } catch (e: Exception) {

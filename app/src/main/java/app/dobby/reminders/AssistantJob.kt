@@ -27,7 +27,7 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
             val tools = app.router.listTools()
             engine.load(entry, app.models.fileFor(entry).absolutePath, tools,
                 ToolExecutor { n, a -> app.router.callTool(n, a) },
-                PromptBuilder.system(app, tools.map { it.name }))
+                PromptBuilder.system(app, tools.map { it.name }), nativeTools = app.models.toolMode == "native")
             val out = StringBuilder()
             engine.send(PromptBuilder.withContext(app, prompt)).collect { if (it is ChatEvent.Token) out.append(it.text) }
             ReminderReceiver.notify(app, notifId, title, out.toString().ifBlank { "(no answer)" }.take(1500))

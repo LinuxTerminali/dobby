@@ -65,6 +65,11 @@ class ModelRegistry(private val context: Context) {
     fun setBackendOverride(id: String, backend: String?) = prefs.edit().apply { if (backend == null) remove("backend:$id") else putString("backend:$id", backend) }.apply()
     fun withBackend(e: ModelEntry): ModelEntry = backendOverride(e.id)?.let { e.copy(backend = it) } ?: e
 
+    /** "prompt" (default: app parses TOOL lines) or "native" (runtime tool calling). */
+    var toolMode: String
+        get() = prefs.getString("tool_mode", "prompt") ?: "prompt"
+        set(v) = prefs.edit().putString("tool_mode", v).apply()
+
     var selectedId: String?
         get() = prefs.getString("selected", null)
         set(v) = prefs.edit().putString("selected", v).apply()

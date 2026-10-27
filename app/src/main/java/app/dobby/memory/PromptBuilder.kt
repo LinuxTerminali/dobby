@@ -21,7 +21,7 @@ object PromptBuilder {
             When a tool returns dates or amounts, repeat them exactly as given. If a tool fails, say so.
             About the user:
             $profile
-            Available tools: ${toolNames.joinToString(", ")}.
+            ${if (toolNames.isEmpty()) "No tools are available in this conversation." else ""}
         """.trimIndent()
     }
 

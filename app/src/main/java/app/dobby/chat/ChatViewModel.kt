@@ -30,17 +30,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (entry == null) { status.value = "Pick a model in the Models tab"; return false }
         if (!app.models.isDownloaded(entry)) { status.value = "Model not downloaded: ${entry.name}"; return false }
         val tools = app.router.listTools()
-        val sig = entry.id + "|" + entry.backend + "|" + tools.joinToString(",") { it.name }
+        val sig = entry.id + "|" + entry.backend + "|" + app.models.toolMode + "|" + tools.joinToString(",") { it.name }
         if (sig == loadedSignature && EngineHolder.get(app).loadedModel != null) return true
         status.value = "Loading ${entry.name}…"
         val executor = ToolExecutor { name, args -> app.router.callTool(name, args) }
         try {
-            EngineHolder.get(app).load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }))
+            EngineHolder.get(app).load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }),
+                nativeTools = app.models.toolMode == "native")
         } catch (e: Exception) {
             status.value = "Load failed: ${e.message}"; return false
         }
         loadedSignature = sig
-        status.value = "${entry.name} · ${EngineHolder.get(app).loadedBackend} · ${tools.size} tools"
+        status.value = "${entry.name} · ${EngineHolder.get(app).loadedBackend} · ${tools.size} tools (${app.models.toolMode})"
         return true
     }
 

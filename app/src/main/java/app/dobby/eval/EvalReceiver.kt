@@ -22,6 +22,7 @@ class EvalReceiver : BroadcastReceiver() {
         val id = intent.getStringExtra("model") ?: app.models.selectedId
         val entry = app.models.all().firstOrNull { it.id == id } ?: return
         intent.getStringExtra("backend")?.let { app.models.setBackendOverride(entry.id, it.lowercase()) }
+        intent.getStringExtra("tools")?.let { app.models.toolMode = it.lowercase() }
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
