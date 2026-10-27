@@ -24,7 +24,8 @@ class EvalRunner(private val app: App) {
 
     data class Run(val summary: String, val csv: File, val results: List<EvalMetrics.CaseResult>)
 
-    suspend fun run(entry: ModelEntry, onProgress: (String) -> Unit = {}): Run {
+    suspend fun run(requested: ModelEntry, onProgress: (String) -> Unit = {}): Run {
+        val entry = app.models.withBackend(requested)
         val golden = JSONObject(app.assets.open("golden.json").bufferedReader().readText())
         val cases = golden.getJSONArray("cases")
         val tools = app.connectors.all.flatMap { s -> s.tools().map { t -> t.copy(name = "${s.id}.${t.name}") } }
@@ -67,12 +68,22 @@ class EvalRunner(private val app: App) {
 
         val dir = File(app.getExternalFilesDir(null), "eval").apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
-        val csv = File(dir, "${entry.id}-$stamp.csv")
+        val tag = "${entry.id}-${entry.backend}-$stamp"
+        val csv = File(dir, "$tag.csv")
         csv.writeText(EvalMetrics.csvHeader() + "\n" + results.joinToString("\n") { EvalMetrics.csvRow(it) } + "\n")
         val summary = EvalMetrics.summary(results, entry.name) +
-            "\nload ${loadMs} ms · pss ${pssMb} MB · battery ${(chargeStart - chargeEnd) / 1000} mAh · ${app.models.fileFor(entry).name}"
-        File(dir, "${entry.id}-$stamp.txt").writeText(summary + "\n\n" + results.filter { !it.pass }.joinToString("\n") {
+            "\nbackend ${engine.loadedBackend} · load ${loadMs} ms · pss ${pssMb} MB · battery ${(chargeStart - chargeEnd) / 1000} mAh · ${app.models.fileFor(entry).name}"
+        val txt = File(dir, "$tag.txt")
+        txt.writeText(summary + "\n\n" + results.filter { !it.pass }.joinToString("\n") {
             "FAIL ${it.id}: calls=${it.calls} bad=${it.badNumbers} reply=${it.reply.take(160).replace('\n', ' ')}" })
+        exportToDownloads(listOf(csv, txt))
         return Run(summary, csv, results)
+    }
+
+    /** Copy results to Download/Dobby/eval so a file manager (or Termux) can read them. Needs all-files access. */
+    private fun exportToDownloads(files: List<File>) {
+        if (!android.os.Environment.isExternalStorageManager()) return
+        val out = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Dobby/eval").apply { mkdirs() }
+        files.forEach { f -> runCatching { f.copyTo(File(out, f.name), overwrite = true) } }
     }
 }

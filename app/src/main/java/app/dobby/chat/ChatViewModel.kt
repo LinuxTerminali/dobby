@@ -26,11 +26,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Reload when the selected model or the active tool set changed. */
     private suspend fun ensureLoaded(): Boolean {
-        val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }
+        val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }?.let { app.models.withBackend(it) }
         if (entry == null) { status.value = "Pick a model in the Models tab"; return false }
         if (!app.models.isDownloaded(entry)) { status.value = "Model not downloaded: ${entry.name}"; return false }
         val tools = app.router.listTools()
-        val sig = entry.id + "|" + tools.joinToString(",") { it.name }
+        val sig = entry.id + "|" + entry.backend + "|" + tools.joinToString(",") { it.name }
         if (sig == loadedSignature && EngineHolder.get(app).loadedModel != null) return true
         status.value = "Loading ${entry.name}…"
         val executor = ToolExecutor { name, args -> app.router.callTool(name, args) }
@@ -40,7 +40,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             status.value = "Load failed: ${e.message}"; return false
         }
         loadedSignature = sig
-        status.value = "${entry.name} · ${tools.size} tools"
+        status.value = "${entry.name} · ${EngineHolder.get(app).loadedBackend} · ${tools.size} tools"
         return true
     }
 

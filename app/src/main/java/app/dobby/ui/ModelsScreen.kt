@@ -78,7 +78,7 @@ fun ModelsScreen() {
                     evalBusy = true; evalOut = "Running eval…"
                     scope.launch {
                         evalOut = runCatching { EvalRunner(app).run(m) { p -> evalOut = "Eval $p" } }
-                            .map { it.summary + "\nCSV: ${it.csv.name} (adb pull /sdcard/Android/data/app.dobby/files/eval/)" }
+                            .map { it.summary + "\nFiles: ${it.csv.name} (Download/Dobby/eval with all-files access, else adb pull /sdcard/Android/data/app.dobby/files/eval/)" }
                             .getOrElse { "eval failed: ${it.message}" }
                         evalBusy = false
                     }
@@ -110,6 +110,18 @@ private fun ModelCard(m: ModelEntry, onChanged: () -> Unit, evalBusy: Boolean, o
         if (running) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(progress = { prog!!.percent / 100f }, modifier = Modifier.fillMaxWidth())
+        }
+        if (downloaded) {
+            Spacer(Modifier.height(8.dp))
+            val current = app.models.withBackend(m).backend.lowercase()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Backend", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.width(8.dp))
+                listOf("gpu", "cpu").forEach { b ->
+                    androidx.compose.material3.FilterChip(selected = current == b, onClick = { app.models.setBackendOverride(m.id, if (b == m.backend) null else b); onChanged() },
+                        label = { Text(b.uppercase()) }, modifier = Modifier.padding(end = 6.dp))
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {

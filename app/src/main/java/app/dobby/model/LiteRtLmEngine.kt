@@ -37,16 +37,18 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     private var config: ConversationConfig? = null
     override var loadedModel: ModelEntry? = null
         private set
+    override var loadedBackend: String? = null
+        private set
 
     override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String) =
         withContext(Dispatchers.IO) {
             close()
             val wantGpu = entry.backend.equals("gpu", ignoreCase = true)
             engine = try {
-                open(modelPath, if (wantGpu) Backend.GPU() else Backend.CPU())
+                open(modelPath, if (wantGpu) Backend.GPU() else Backend.CPU()).also { loadedBackend = if (wantGpu) "GPU" else "CPU" }
             } catch (e: Exception) {
                 Log.w(TAG, "backend ${entry.backend} failed, falling back to CPU: ${e.message}")
-                if (wantGpu) open(modelPath, Backend.CPU()) else throw e
+                if (wantGpu) open(modelPath, Backend.CPU()).also { loadedBackend = "CPU (fallback)" } else throw e
             }
             toolObjects = if (entry.supportsTools) tools.map { McpOpenApiTool(it, executor) } else emptyList()
             config = ConversationConfig(
@@ -71,19 +73,30 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         val conv = conversation ?: run { close(); return@callbackFlow }
         val t0 = System.currentTimeMillis()
         toolObjects.forEach { it.sink = { ev -> trySend(ev) } }
-        try {
+        suspend fun stream(text: String) {
             // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
             // only `channels` (thinking stream) have empty contents and are skipped.
-            conv.sendMessageAsync(userText).collect { msg ->
-                val t = msg.contents.contents
-                    .filterIsInstance<Content.Text>()
-                    .joinToString("") { it.text }
-                if (t.isNotEmpty()) trySend(ChatEvent.Token(t))
+            // `send` (not trySend) so a slow collector applies backpressure instead of dropping chunks.
+            conv.sendMessageAsync(text).collect { msg ->
+                val t = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
+                if (t.isNotEmpty()) send(ChatEvent.Token(t))
             }
-            trySend(ChatEvent.Done(System.currentTimeMillis() - t0))
+        }
+        try {
+            try {
+                stream(userText)
+            } catch (e: Exception) {
+                // The model emitted a tool call the runtime could not parse: ask once for a clean retry.
+                if (e.message?.contains("parse tool call", ignoreCase = true) == true) {
+                    Log.w(TAG, "malformed tool call, retrying once: ${e.message}")
+                    send(ChatEvent.ToolResult("runtime", "malformed tool call; retrying"))
+                    stream("Your last tool call was malformed. Call the tool again with all string arguments in double quotes, or answer without a tool.")
+                } else throw e
+            }
+            send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } catch (e: Exception) {
-            trySend(ChatEvent.Token("\n[error: ${e.message}]"))
-            trySend(ChatEvent.Done(System.currentTimeMillis() - t0))
+            send(ChatEvent.Token("\n[error: ${e.message}]"))
+            send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } finally {
             toolObjects.forEach { it.sink = null }
             close()
@@ -100,7 +113,7 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     override suspend fun close() = withContext(Dispatchers.IO) {
         runCatching { conversation?.close() }
         runCatching { engine?.close() }
-        conversation = null; engine = null; loadedModel = null
+        conversation = null; engine = null; loadedModel = null; loadedBackend = null
     }
 
     companion object { private const val TAG = "LiteRtLmEngine" }

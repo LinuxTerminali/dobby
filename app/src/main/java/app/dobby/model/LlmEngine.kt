@@ -21,6 +21,8 @@ sealed class ChatEvent {
  */
 interface LlmEngine {
     val loadedModel: ModelEntry?
+    /** "GPU" or "CPU": what actually initialised (may differ from the request after a fallback). */
+    val loadedBackend: String?
     suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String)
     fun send(userText: String): Flow<ChatEvent>
     suspend fun resetConversation()

@@ -60,6 +60,11 @@ class ModelRegistry(private val context: Context) {
     }
     fun isDownloaded(e: ModelEntry) = fileFor(e).let { it.exists() && it.length() > 1_000_000 }
 
+    /** Per-model backend override ("gpu"/"cpu"); null = the registry default. */
+    fun backendOverride(id: String): String? = prefs.getString("backend:$id", null)
+    fun setBackendOverride(id: String, backend: String?) = prefs.edit().apply { if (backend == null) remove("backend:$id") else putString("backend:$id", backend) }.apply()
+    fun withBackend(e: ModelEntry): ModelEntry = backendOverride(e.id)?.let { e.copy(backend = it) } ?: e
+
     var selectedId: String?
         get() = prefs.getString("selected", null)
         set(v) = prefs.edit().putString("selected", v).apply()
