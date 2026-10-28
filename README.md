@@ -55,6 +55,12 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Compaction
+After ~6K tokens of conversation (and at least 6 turns), older turns are summarised by a tool-less one-shot
+call into a ≤120-word note; lasting facts the user stated are saved to memory (source `compaction`); the
+conversation restarts with the note and the last two exchanges as context. The chat shows a small
+"Earlier turns summarised" line. `Compactor` is pure Kotlin with tests.
+
 ## Permissions
 Tools declare an effect: READ, WRITE, DESTRUCTIVE. Destructive calls (`memory.forget`, `reminders.delete`,
 `places.delete`) pause the turn and show Allow / Always allow / Deny in chat; a denied call returns an error the

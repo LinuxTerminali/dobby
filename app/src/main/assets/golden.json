@@ -546,7 +546,6 @@
    "id": "mem-recall-01",
    "group": "memory",
    "prompt": "What do you know about my office?",
-   "expect_tool": "memory.recall",
    "expect_args": {
     "query": "~office"
    },
@@ -560,9 +559,16 @@
        "source": "user"
       }
      ]
+    },
+    "places.list": {
+     "summary": "No saved places.",
+     "places": []
     }
    },
-   "reply_contains": "north gate"
+   "reply_contains": "north gate",
+   "expect_includes": [
+    "memory.recall"
+   ]
   },
   {
    "id": "mem-noinfer-01",

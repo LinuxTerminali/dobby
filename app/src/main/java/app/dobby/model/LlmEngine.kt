@@ -28,6 +28,10 @@ interface LlmEngine {
     suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean = false,
                      isAlwaysAllowed: (String) -> Boolean = { false })
     fun send(userText: String): Flow<ChatEvent>
+    /** Approximate size of the live conversation (chars sent + received since it started). */
+    val contextChars: Long
+    /** A separate, tool-less, single-turn call that leaves the main conversation untouched. */
+    suspend fun oneShot(prompt: String, maxChars: Int = 4000): String
     suspend fun resetConversation()
     suspend fun close()
 }

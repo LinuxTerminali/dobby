@@ -95,6 +95,11 @@ private fun EmptyState(modifier: Modifier, onPick: (String) -> Unit) {
 
 @Composable
 private fun MessageRow(m: ChatMessage) {
+    if (m.role == "system") {
+        Text(m.text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        return
+    }
     val user = m.role == "user"
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (user) Arrangement.End else Arrangement.Start) {
         if (user) {

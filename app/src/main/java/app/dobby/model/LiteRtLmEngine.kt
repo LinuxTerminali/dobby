@@ -45,6 +45,8 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     private var promptExecutor: ToolExecutor? = null
 
     private var alwaysAllowed: (String) -> Boolean = { false }
+    override var contextChars: Long = 0L
+        private set
 
     override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean,
                               isAlwaysAllowed: (String) -> Boolean) =
@@ -92,9 +94,11 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
             // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
             // only `channels` (thinking stream) have empty contents and are skipped.
             // `send` (not trySend) so a slow collector applies backpressure instead of dropping chunks.
+            contextChars += text.length
             conv.sendMessageAsync(text).collect { msg ->
                 val t = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                 if (t.isEmpty()) return@collect
+                contextChars += t.length
                 buf.append(t)
                 val visible = if (holdToolLine) PromptTools.visiblePrefix(buf.toString(), final = false) else buf.toString()
                 if (visible.length > shown) { send(ChatEvent.Token(visible.substring(shown))); shown = visible.length }
@@ -159,9 +163,24 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         awaitClose { }
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun oneShot(prompt: String, maxChars: Int): String = withContext(Dispatchers.IO) {
+        val e = engine ?: return@withContext ""
+        val tmp = e.createConversation(ConversationConfig(
+            samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
+            thinkingConfig = ThinkingConfig(enableThinking = false)))
+        try {
+            val out = StringBuilder()
+            tmp.sendMessageAsync(prompt).collect { msg ->
+                out.append(msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text })
+            }
+            out.toString().take(maxChars)
+        } finally { runCatching { tmp.close() } }
+    }
+
     override suspend fun resetConversation() = withContext(Dispatchers.IO) {
         conversation?.close()
         conversation = engine?.createConversation(config!!)
+        contextChars = 0
         Unit
     }
 
