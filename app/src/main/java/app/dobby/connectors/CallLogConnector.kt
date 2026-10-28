@@ -22,7 +22,7 @@ class CallLogConnector(private val context: Context) : Connector {
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
 
     override fun tools() = listOf(
-        ToolSpec("recent", "List recent calls (incoming, outgoing, missed).",
+        ToolSpec("recent", "List recent calls (incoming, outgoing, missed). Set days for older history, e.g. 365 for a year.",
             ToolSpec.schema(listOf(
                 Triple("days", "integer", "Look back this many days. Default 7"),
                 Triple("limit", "integer", "Max rows. Default 20")))),

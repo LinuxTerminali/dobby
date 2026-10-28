@@ -29,6 +29,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Summary of compacted earlier turns; prefixed to the next message once. */
     private var pendingContext: String? = null
     private var turnsSinceCompaction = 0
+    private var runtimeErrors = 0
     val compactions = mutableStateOf(0)
     private var nextId = 1L
 
@@ -87,6 +88,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     is ChatEvent.ToolResult -> { pendingApproval.value = null; update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
                     is ChatEvent.Confirm -> { flush(); pendingApproval.value = Triple(ev.id, ev.name, ev.args) }
                     is ChatEvent.RuntimeError -> runtimeError = ev.message
+                    is ChatEvent.Retract -> { pending.setLength(0); update(replyId) { it.copy(text = "", tools = it.tools + "↻ regenerating: ${ev.reason}") } }
                     is ChatEvent.Done -> { flush(); status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s" }
                 }
             }
@@ -96,6 +98,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 messages.removeAll { it.id == replyId }
                 messages.removeAll { it.id == replyId - 1 && it.role == "user" }
                 compactNow(force = true)
+                runtimeErrors++
+                val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }
+                if (runtimeErrors >= 2 && entry != null && app.models.withBackend(entry).backend != "cpu") {
+                    // Second failure in this session: fall back to CPU (slower, but it does not hit this limit).
+                    app.models.setBackendOverride(entry.id, "cpu")
+                    messages += ChatMessage(nextId++, "system", "GPU failed twice; switched this model to CPU (slower). Change it back in Models.")
+                }
                 messages += ChatMessage(nextId++, "system", if (retry) "Conversation was too long for the model; summarised and retrying" else "Model error: ${runtimeError!!.take(120)}")
                 busy.value = false
                 if (retry) send(text, retry = false)

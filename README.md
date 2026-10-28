@@ -55,6 +55,16 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Validator
+Code checks the model's output every turn (`model/Validator`, pure Kotlin, tested):
+- A numeric tool argument that looks like a mangled copy of a number the user typed (365 → 35) blocks the
+  call; the model is told the user's value and asked again.
+- Numbers in a reply must appear in the user's message, the tool results, or today's date; otherwise the
+  reply is regenerated once with the offending numbers named, and if still unverifiable it is shown with
+  "⚠ Could not verify: …".
+- An empty tool result tells the model to try another listed tool before giving up.
+- After two GPU runtime errors in a session the model is switched to CPU with a note.
+
 ## Compaction
 After ~2.5K tokens of conversation (and at least 4 turns), older turns are summarised by a tool-less one-shot
 call into a ≤120-word note; lasting facts the user stated are saved to memory (source `compaction`); the

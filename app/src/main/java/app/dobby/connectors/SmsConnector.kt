@@ -35,20 +35,30 @@ class SmsConnector(private val context: Context) : Connector {
         val limit = args.optInt("limit", 20)
         val days = args.optInt("days", 30)
         val since = System.currentTimeMillis() - days * 86_400_000L
-        val q = if (tool == "search") args.getString("query") else null
+        val terms = if (tool == "search") app.dobby.util.SmsQuery.expand(args.getString("query")) else emptyList()
         val sel = StringBuilder("${Telephony.Sms.DATE} > ?")
         val sa = mutableListOf(since.toString())
-        if (q != null) { sel.append(" AND (${Telephony.Sms.BODY} LIKE ? OR ${Telephony.Sms.ADDRESS} LIKE ?)"); sa += "%$q%"; sa += "%$q%" }
-        val arr = JSONArray()
+        if (terms.isNotEmpty()) {
+            // Any term may match (OR); rows are ranked by how many terms hit, then by recency.
+            sel.append(" AND (" + terms.joinToString(" OR ") { "${Telephony.Sms.BODY} LIKE ? OR ${Telephony.Sms.ADDRESS} LIKE ?" } + ")")
+            terms.forEach { sa += "%$it%"; sa += "%$it%" }
+        }
+        data class Row(val from: String, val at: Long, val body: String, val hits: Int)
+        val rows = mutableListOf<Row>()
         context.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,
             arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
             sel.toString(), sa.toTypedArray(), "${Telephony.Sms.DATE} DESC")?.use { c ->
-            while (c.moveToNext() && arr.length() < limit) {
+            while (c.moveToNext() && rows.size < limit * 5) {
                 val body = c.getString(1) ?: ""
                 if (OTP.containsMatchIn(body)) continue   // never hand OTPs to the model
-                arr.put(JSONObject().put("from", c.getString(0)).put("at", Fmt.dateTime(c.getLong(2))).put("body", body))
+                val from = c.getString(0) ?: ""
+                val hay = (from + " " + body).lowercase()
+                rows += Row(from, c.getLong(2), body, terms.count { hay.contains(it.lowercase()) })
             }
         }
+        val arr = JSONArray()
+        rows.sortedWith(compareByDescending<Row> { it.hits }.thenByDescending { it.at }).take(limit)
+            .forEach { arr.put(JSONObject().put("from", it.from).put("at", Fmt.dateTime(it.at)).put("body", it.body)) }
         val summary = if (arr.length() == 0) "No SMS found." else (0 until minOf(arr.length(), 6)).joinToString(" ") { i ->
             val m = arr.getJSONObject(i); "From ${m.getString("from")} on ${m.getString("at")}: \"${m.getString("body").take(200)}\""
         } + if (arr.length() > 6) " (+${arr.length() - 6} more)" else ""

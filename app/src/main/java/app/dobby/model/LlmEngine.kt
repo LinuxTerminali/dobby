@@ -17,6 +17,8 @@ sealed class ChatEvent {
     data class Done(val millis: Long) : ChatEvent()
     /** The runtime failed on this turn (e.g. GPU prefill state exhausted); the conversation must be reset. */
     data class RuntimeError(val message: String) : ChatEvent()
+    /** The reply streamed so far failed validation and is being regenerated; the UI should clear it. */
+    data class Retract(val reason: String) : ChatEvent()
 }
 
 /**
