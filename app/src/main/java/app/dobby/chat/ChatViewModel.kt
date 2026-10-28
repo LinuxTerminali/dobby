@@ -9,6 +9,7 @@ import app.dobby.App
 import app.dobby.memory.PromptBuilder
 import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
+import app.dobby.model.Compactor
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
 import kotlinx.coroutines.delay
@@ -25,6 +26,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** A destructive tool call waiting for the user: (approval id, tool, args). */
     val pendingApproval = mutableStateOf<Triple<String, String, String>?>(null)
     private var loadedSignature: String? = null
+    /** Summary of compacted earlier turns; prefixed to the next message once. */
+    private var pendingContext: String? = null
+    private var turnsSinceCompaction = 0
+    private var runtimeErrors = 0
+    val compactions = mutableStateOf(0)
     private var nextId = 1L
 
     /** Reload when the selected model or the active tool set changed. */
@@ -53,7 +59,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (i >= 0) messages[i] = f(messages[i])
     }
 
-    fun send(text: String) {
+    fun send(text: String) = send(text, retry = true)
+
+    private fun send(text: String, retry: Boolean) {
         if (text.isBlank() || busy.value) return
         messages += ChatMessage(nextId++, "user", text)
         val replyId = nextId++
@@ -70,20 +78,73 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 update(replyId) { it.copy(text = it.text + chunk) }
                 lastFlush = System.currentTimeMillis()
             }
-            EngineHolder.get(app).send(PromptBuilder.withContext(app, text)).collect { ev ->
+            val prefix = pendingContext?.let { Compactor.contextPrefix(it) } ?: ""
+            pendingContext = null
+            var runtimeError: String? = null
+            EngineHolder.get(app).send(prefix + PromptBuilder.withContext(app, text)).collect { ev ->
                 when (ev) {
                     is ChatEvent.Token -> { pending.append(ev.text); if (System.currentTimeMillis() - lastFlush > 80) flush() }
                     is ChatEvent.ToolCall -> { flush(); update(replyId) { it.copy(tools = it.tools + "→ ${ev.name} ${ev.args.take(160)}") } }
                     is ChatEvent.ToolResult -> { pendingApproval.value = null; update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
                     is ChatEvent.Confirm -> { flush(); pendingApproval.value = Triple(ev.id, ev.name, ev.args) }
+                    is ChatEvent.RuntimeError -> runtimeError = ev.message
+                    is ChatEvent.Retract -> { pending.setLength(0); update(replyId) { it.copy(text = "", tools = it.tools + "↻ regenerating: ${ev.reason}") } }
                     is ChatEvent.Done -> { flush(); status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s" }
                 }
             }
             flush()
+            if (runtimeError != null) {
+                // The backend ran out of state for this conversation: compact what we have, reset, and retry the message once.
+                messages.removeAll { it.id == replyId }
+                messages.removeAll { it.id == replyId - 1 && it.role == "user" }
+                compactNow(force = true)
+                runtimeErrors++
+                val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }
+                if (runtimeErrors >= 2 && entry != null && app.models.withBackend(entry).backend != "cpu") {
+                    // Second failure in this session: fall back to CPU (slower, but it does not hit this limit).
+                    app.models.setBackendOverride(entry.id, "cpu")
+                    messages += ChatMessage(nextId++, "system", "GPU failed twice; switched this model to CPU (slower). Change it back in Models.")
+                }
+                messages += ChatMessage(nextId++, "system", if (retry) "Conversation was too long for the model; summarised and retrying" else "Model error: ${runtimeError!!.take(120)}")
+                busy.value = false
+                if (retry) send(text, retry = false)
+                return@launch
+            }
             update(replyId) { it.copy(streaming = false) }
+            turnsSinceCompaction++
+            maybeCompact()
             busy.value = false
         }
     }
+
+    /** Past the budget: summarise older turns, save lasting facts, restart the conversation with the note. */
+    private suspend fun maybeCompact() {
+        val engine = EngineHolder.get(app)
+        if (!Compactor.shouldCompact(engine.contextChars, turnsSinceCompaction)) return
+        compactNow(force = false)
+    }
+
+    private suspend fun compactNow(force: Boolean) {
+        val engine = EngineHolder.get(app)
+        status.value = status.value.substringBefore(" · took") + " · compacting…"
+        val turns = messages.filter { it.role == "user" || it.role == "model" }.map { Compactor.Turn(it.role, it.text) }
+        val (older, keep) = if (force) turns to emptyList() else Compactor.split(turns)
+        if (older.isEmpty()) { runCatching { engine.resetConversation() }; status.value = status.value.substringBefore(" · compacting"); return }
+        // After a runtime error the live conversation is unusable; reset first so the one-shot runs on a clean engine.
+        if (force) runCatching { engine.resetConversation() }
+        val out = runCatching { engine.oneShot(Compactor.prompt(older, lastSummary)) }.getOrDefault("")
+        val r = Compactor.parse(out)
+        r.facts.forEach { (text, tags) -> app.memory.remember(text, tags, "compaction") }
+        lastSummary = r.summary
+        pendingContext = if (r.summary.isBlank()) null
+            else r.summary + if (keep.isNotEmpty()) "\nMost recent exchange: " + keep.joinToString(" / ") { "${it.role}: ${it.text.take(200)}" } else ""
+        runCatching { engine.resetConversation() }
+        turnsSinceCompaction = 0
+        compactions.value++
+        messages += ChatMessage(nextId++, "system", "Earlier turns summarised" + if (r.facts.isNotEmpty()) "; ${r.facts.size} fact(s) saved to memory" else "")
+        status.value = status.value.substringBefore(" · compacting")
+    }
+    private var lastSummary: String? = null
 
     fun approve(always: Boolean) {
         val (id, tool, _) = pendingApproval.value ?: return
@@ -98,7 +159,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         pendingApproval.value = null
     }
 
-    fun clear() { messages.clear(); viewModelScope.launch { runCatching { EngineHolder.get(app).resetConversation() } } }
+    fun clear() { messages.clear(); pendingContext = null; lastSummary = null; turnsSinceCompaction = 0; viewModelScope.launch { runCatching { EngineHolder.get(app).resetConversation() } } }
 
     fun unload() { viewModelScope.launch { EngineHolder.get(app).close(); loadedSignature = null; status.value = "No model loaded" } }
 }

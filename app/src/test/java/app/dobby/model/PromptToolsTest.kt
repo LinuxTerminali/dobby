@@ -98,14 +98,15 @@ class PromptToolsTest {
 class ToolRouterTest {
     private fun spec(n: String) = ToolSpec(n, "d", ToolSpec.schema(emptyList()))
     private val all = listOf("calls.recent","calls.missed","calls.with","sms.search","sms.recent","gmail.search","gmail.read","docs.read","sheets.read",
-        "web.fetch","device.now","device.location","reminders.create","reminders.list","reminders.delete",
+        "web.search","web.fetch","web.extract","web.research","device.now","device.location","reminders.create","reminders.list","reminders.delete",
         "places.list","places.set","places.add_rule","places.events","places.delete","memory.remember","memory.recall","memory.forget","memory.profile").map(::spec)
 
     @Test fun routesByKeyword() {
         val names = ToolRouter.route("Did I miss any calls this week?", all).map { it.name }
         assertTrue(names.toString(), "calls.missed" in names && "memory.recall" in names && "web.fetch" !in names)
         assertTrue(ToolRouter.route("Remind me to eat an apple when I reach office", all).map { it.name }.containsAll(listOf("reminders.create", "places.list")))
-        assertEquals(listOf("web.fetch", "memory.recall"), ToolRouter.route("Summarise this page: https://example.com/x", all).map { it.name })
+        assertEquals(listOf("web.fetch", "memory.recall"), ToolRouter.route("Summarise this page: https://example.com/x", all).map { it.name }.filter { it != "web.search" && it != "web.extract" && it != "web.research" })
+        assertTrue(ToolRouter.route("what is the status of train 16589", all).map { it.name }.contains("web.research"))
     }
 
     @Test fun fallsBackToAllWhenNothingMatches() {

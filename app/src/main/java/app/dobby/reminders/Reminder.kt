@@ -20,11 +20,18 @@ data class Reminder(
     val atMillis: Long = 0,
     val prompt: String = "",
     val enabled: Boolean = true,
+    val everyMinutes: Int = 0,
 ) {
-    val recurring get() = days.isNotEmpty()
+    val recurring get() = days.isNotEmpty() || everyMinutes > 0
 
     /** Next trigger strictly after `now`. Null when a one-off is already past. */
     fun nextTrigger(now: Long = System.currentTimeMillis()): Long? {
+        if (everyMinutes > 0) {
+            val step = everyMinutes * 60_000L
+            val base = if (atMillis > 0) atMillis else now
+            if (base > now) return base
+            return base + ((now - base) / step + 1) * step
+        }
         if (!recurring) return if (atMillis > now) atMillis else null
         val c = Calendar.getInstance().apply {
             timeInMillis = now
@@ -39,10 +46,11 @@ data class Reminder(
 
     fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("message", message)
         .put("hour", hour).put("minute", minute).put("days", JSONArray(days)).put("at_millis", atMillis)
-        .put("prompt", prompt).put("enabled", enabled)
+        .put("prompt", prompt).put("enabled", enabled).put("every_minutes", everyMinutes)
 
     fun describe(): String {
         val t = "%02d:%02d".format(hour, minute)
+        if (everyMinutes > 0) return "every $everyMinutes min"
         return if (recurring) "$t on " + days.sorted().joinToString(",") { DAY[it] ?: "?" } else "once at ${java.util.Date(atMillis)}"
     }
 
@@ -51,7 +59,7 @@ data class Reminder(
         fun fromJson(o: JSONObject): Reminder {
             val d = o.optJSONArray("days") ?: JSONArray()
             return Reminder(o.getString("id"), o.getString("title"), o.optString("message"), o.getInt("hour"), o.getInt("minute"),
-                (0 until d.length()).map { d.getInt(it) }, o.optLong("at_millis"), o.optString("prompt"), o.optBoolean("enabled", true))
+                (0 until d.length()).map { d.getInt(it) }, o.optLong("at_millis"), o.optString("prompt"), o.optBoolean("enabled", true), o.optInt("every_minutes", 0))
         }
     }
 }

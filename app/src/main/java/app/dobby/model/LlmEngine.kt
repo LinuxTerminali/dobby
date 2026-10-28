@@ -15,6 +15,10 @@ sealed class ChatEvent {
     /** The model wants to run a destructive tool; the UI must call Approvals.resolve(id, …). */
     data class Confirm(val id: String, val name: String, val args: String) : ChatEvent()
     data class Done(val millis: Long) : ChatEvent()
+    /** The runtime failed on this turn (e.g. GPU prefill state exhausted); the conversation must be reset. */
+    data class RuntimeError(val message: String) : ChatEvent()
+    /** The reply streamed so far failed validation and is being regenerated; the UI should clear it. */
+    data class Retract(val reason: String) : ChatEvent()
 }
 
 /**
@@ -28,6 +32,10 @@ interface LlmEngine {
     suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean = false,
                      isAlwaysAllowed: (String) -> Boolean = { false })
     fun send(userText: String): Flow<ChatEvent>
+    /** Approximate size of the live conversation (chars sent + received since it started). */
+    val contextChars: Long
+    /** A separate, tool-less, single-turn call that leaves the main conversation untouched. */
+    suspend fun oneShot(prompt: String, maxChars: Int = 4000): String
     suspend fun resetConversation()
     suspend fun close()
 }

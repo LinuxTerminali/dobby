@@ -22,6 +22,7 @@ class ConnectorRegistry(context: Context, memory: MemoryStore) {
     )
 
     fun googleAuth() = auth
+    fun web() = all.filterIsInstance<BrowserConnector>().first()
 
     /** Connectors that are switched on and ready: these are what the model sees. */
     fun active(context: Context): List<Connector> =

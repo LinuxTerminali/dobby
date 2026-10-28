@@ -55,6 +55,41 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Web tools
+`web.search` (DuckDuckGo HTML, or Brave Search with a key in Settings), `web.fetch` (readable main text,
+JS pages rendered in a hidden WebView), `web.extract(url, query)` (the passages that match a question,
+for long pages and tables), `web.research(question)` (search → read top pages → relevant passages with
+numbered sources, in one call). Pages are cached per session. `TextExtract` and `SearchParse` are pure
+Kotlin with tests.
+
+## Scheduled checks
+`reminders.create` with `every_minutes` (min 15) and a `prompt` runs that prompt with tools on schedule;
+the job notifies only when the answer is not "NOTHING"/"no change". The protocol tells the model it can
+do this, so "check this page every 15 minutes" becomes a tool call.
+
+## Validator
+Code checks the model's output every turn (`model/Validator`, pure Kotlin, tested):
+- A numeric tool argument that looks like a mangled copy of a number the user typed (365 → 35) blocks the
+  call; the model is told the user's value and asked again.
+- Numbers and clock times in a reply must appear in the user's message, the tool results, or today's date;
+  malformed times (23:000) always fail. String args that look like a word the user typed with characters
+  dropped (moengage → engage) block the call; otherwise the
+  reply is regenerated once with the offending numbers named, and if still unverifiable it is shown with
+  "⚠ Could not verify: …".
+- An empty tool result tells the model to try another listed tool before giving up.
+- After two GPU runtime errors in a session the model is switched to CPU with a note.
+
+## Compaction
+After ~2.5K tokens of conversation (and at least 4 turns), older turns are summarised by a tool-less one-shot
+call into a ≤120-word note; lasting facts the user stated are saved to memory (source `compaction`); the
+conversation restarts with the note and the last two exchanges as context. The chat shows a small
+"Earlier turns summarised" line. `Compactor` is pure Kotlin with tests.
+
+## Runtime errors
+LiteRT-LM on the Pixel 9 GPU degrades as a conversation grows (dropped digits, then `Status Code: 9 …
+state entries` / `Status Code: 13`). The engine reports these as `RuntimeError`; the chat compacts, resets and
+retries the message once, with a visible note. Tool data fed to the model is capped at 1.5K chars.
+
 ## Permissions
 Tools declare an effect: READ, WRITE, DESTRUCTIVE. Destructive calls (`memory.forget`, `reminders.delete`,
 `places.delete`) pause the turn and show Allow / Always allow / Deny in chat; a denied call returns an error the

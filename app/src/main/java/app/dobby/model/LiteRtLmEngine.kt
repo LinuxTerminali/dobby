@@ -45,6 +45,8 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     private var promptExecutor: ToolExecutor? = null
 
     private var alwaysAllowed: (String) -> Boolean = { false }
+    override var contextChars: Long = 0L
+        private set
 
     override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean,
                               isAlwaysAllowed: (String) -> Boolean) =
@@ -92,9 +94,11 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
             // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
             // only `channels` (thinking stream) have empty contents and are skipped.
             // `send` (not trySend) so a slow collector applies backpressure instead of dropping chunks.
+            contextChars += text.length
             conv.sendMessageAsync(text).collect { msg ->
                 val t = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                 if (t.isEmpty()) return@collect
+                contextChars += t.length
                 buf.append(t)
                 val visible = if (holdToolLine) PromptTools.visiblePrefix(buf.toString(), final = false) else buf.toString()
                 if (visible.length > shown) { send(ChatEvent.Token(visible.substring(shown))); shown = visible.length }
@@ -121,6 +125,10 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                 var next = PromptTools.turnMessage(userText, offered)
                 var steps = 0
                 var corrected = false
+                var replyRetried = false
+                val sources = mutableListOf(userText)
+                val cal = java.util.Calendar.getInstance()
+                val todayNums = setOf(cal.get(java.util.Calendar.DAY_OF_MONTH), cal.get(java.util.Calendar.MONTH) + 1, cal.get(java.util.Calendar.YEAR)).map { it.toString() }.toSet()
                 while (true) {
                     val (raw, shown) = stream(next, holdToolLine = true)
                     val call = PromptTools.parse(raw, promptTools)   // accept any known tool, not only the offered ones
@@ -132,9 +140,25 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                             next = PromptTools.CORRECTION
                             continue
                         }
-                        // Plain answer (or unfixable): flush whatever the hold-back kept.
+                        // Plain answer: check its numbers against what we know; regenerate once, then mark.
+                        val issue = Validator.checkReply(raw, sources, todayNums)
+                        if (issue != null && !replyRetried) {
+                            replyRetried = true
+                            send(ChatEvent.Retract("numbers not in results: " + issue.ungrounded.joinToString(", ")))
+                            next = Validator.replyCorrection(issue)
+                            continue
+                        }
                         if (raw.length > shown) send(ChatEvent.Token(raw.substring(shown)))
+                        if (issue != null) send(ChatEvent.Token("\n" + Validator.marker(issue)))
                         break
+                    }
+                    // Argument check: a number that looks like a mangled copy of what the user typed blocks the call.
+                    val argIssues = Validator.checkArgs(userText, call.args)
+                    if (argIssues.isNotEmpty() && steps < PromptTools.MAX_STEPS) {
+                        steps++
+                        send(ChatEvent.ToolResult("validator", "blocked ${call.name}: " + argIssues.joinToString { "${it.key}=${it.got} (user said ${it.expected})" }))
+                        next = Validator.argCorrection(argIssues)
+                        continue
                     }
                     if (steps >= PromptTools.MAX_STEPS) { send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]")); break }
                     steps++
@@ -145,12 +169,15 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
                     val result = if (decision == Approvals.Decision.DENY) JSONObject().put("error", "The user did not approve this action. Do not retry it; tell the user it was not done.")
                         else try { promptExecutor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }
                     send(ChatEvent.ToolResult(call.name, result.toString().take(600)))
+                    sources += result.toString()
                     next = PromptTools.resultMessage(call.name, result)
+                    if (isEmptyResult(result)) next += "\n(The result was empty. If another listed tool could answer this, call it; otherwise tell the user.)"
                 }
             }
             send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } catch (e: Exception) {
-            send(ChatEvent.Token("\n[error: ${e.message}]"))
+            val m = e.message ?: e.toString()
+            if (isRuntimeStateError(m)) send(ChatEvent.RuntimeError(m)) else send(ChatEvent.Token("\n[error: $m]"))
             send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } finally {
             toolObjects.forEach { it.sink = null }
@@ -159,9 +186,24 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         awaitClose { }
     }.flowOn(Dispatchers.IO)
 
+    override suspend fun oneShot(prompt: String, maxChars: Int): String = withContext(Dispatchers.IO) {
+        val e = engine ?: return@withContext ""
+        val tmp = e.createConversation(ConversationConfig(
+            samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
+            thinkingConfig = ThinkingConfig(enableThinking = false)))
+        try {
+            val out = StringBuilder()
+            tmp.sendMessageAsync(prompt).collect { msg ->
+                out.append(msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text })
+            }
+            out.toString().take(maxChars)
+        } finally { runCatching { tmp.close() } }
+    }
+
     override suspend fun resetConversation() = withContext(Dispatchers.IO) {
         conversation?.close()
         conversation = engine?.createConversation(config!!)
+        contextChars = 0
         Unit
     }
 
@@ -171,7 +213,13 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         conversation = null; engine = null; loadedModel = null; loadedBackend = null
     }
 
-    companion object { private const val TAG = "LiteRtLmEngine" }
+    companion object {
+        private const val TAG = "LiteRtLmEngine"
+        fun isEmptyResult(r: JSONObject): Boolean =
+            r.optInt("count", -1) == 0 || r.optString("summary").startsWith("No ", ignoreCase = true) || r.has("error")
+        /** Errors seen when the conversation outgrows the backend: Status 9 (prefill work group / state entries), 13 (task failed). */
+        fun isRuntimeStateError(m: String) = m.contains("state entries") || m.contains("Status Code: 9") || m.contains("Status Code: 13") || m.contains("Task failed")
+    }
 }
 
 /** Bridges one MCP ToolSpec to LiteRT-LM's OpenApiTool. */

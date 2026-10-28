@@ -15,6 +15,8 @@ import org.json.JSONObject
  */
 object PromptTools {
     const val MAX_STEPS = 5
+    /** Tool data fed back to the model. Long results grow the context fast on a phone. */
+    const val DATA_CAP = 1500
     private val JSON_LINE = Regex("(?m)^\\s*(?:```(?:json)?\\s*)?TOOL\\s*(\\{.*\\})\\s*(?:```)?\\s*$", RegexOption.DOT_MATCHES_ALL)
     private val FUNC = Regex("(?:<\\|tool_call>\\s*call:\\s*)?([a-z_]+\\.[a-z_]+)\\s*\\((.*?)\\)\\s*(?:<tool_call\\|>)?", RegexOption.DOT_MATCHES_ALL)
     private val HOLD = Regex("(?m)^\\s*(?:```(?:json)?\\s*)?(?:TOOL\\b|<\\|tool_call>|[a-z_]+\\.[a-z_]+\\s*\\()")
@@ -51,7 +53,10 @@ object PromptTools {
         numbers and dates exactly as they appear. Do not call a tool when none is needed. `*` marks a required argument.
         Each message lists the tools available for that request. If a result is empty or an error, try one other
         relevant tool before saying you could not find it. Give only the arguments that apply; leave the rest out.
-        When asked how much in total, add the amounts and state the total. Use memory.remember only when the user asks you to
+        When asked how much in total, add the amounts and state the total.
+        You CAN check things later or repeatedly: reminders.create with a prompt (and every_minutes or a time)
+        makes you run that prompt with tools on schedule. Prefer the tools listed for this request.
+        For facts you do not know, use web.research; cite the source number. For a specific part of a page, web.extract. Use memory.remember only when the user asks you to
         remember something or states a lasting fact about themselves (a place, an account, a preference); never for
         passing events such as what they spent or did today.
     """.trimIndent()
@@ -135,9 +140,9 @@ object PromptTools {
     /** Summary line first (the model copies it), then the data for details. */
     fun resultMessage(name: String, result: JSONObject): String {
         val summary = result.optString("summary", "")
-        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(4000)
+        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(DATA_CAP)
         val data = JSONObject(result.toString()).apply { remove("summary") }.toString()
-        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(3000)
+        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(DATA_CAP)
     }
 
     const val CORRECTION = "That was not a valid tool call. Reply with exactly one line: TOOL {\"name\":\"<tool>\",\"args\":{...}} using a tool from the list, or answer the user directly."
