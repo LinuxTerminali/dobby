@@ -594,6 +594,131 @@
    "group": "general",
    "prompt": "what can you do?",
    "no_tool": true
+  },
+  {
+   "id": "web-search-01",
+   "group": "web",
+   "prompt": "Search the web for the live status of train 16589",
+   "expect_includes": [
+    "web.search"
+   ],
+   "expect_args": {
+    "query": "~16589"
+   },
+   "mocks": {
+    "web.search": {
+     "summary": "1. 16589 Live Status - RailYatri (https://www.railyatri.in/live-train-status/16589): Rani Chennamma Express running status",
+     "results": [
+      {
+       "title": "16589 Live Status - RailYatri",
+       "url": "https://www.railyatri.in/live-train-status/16589",
+       "snippet": "running status"
+      }
+     ]
+    },
+    "web.research": {
+     "summary": "Research notes for \"16589\" (cite the source numbers):\nSource 1: 16589 Live Status (https://www.railyatri.in/live-train-status/16589)\nRani Chennamma Express running on time",
+     "count": 1
+    }
+   },
+   "reply_contains": "16589"
+  },
+  {
+   "id": "web-extract-01",
+   "group": "web",
+   "prompt": "On https://www.railyatri.in/live-train-status/16589 is the train delayed at Davangere?",
+   "expect_includes": [
+    "web.extract"
+   ],
+   "expect_args": {
+    "url": "~railyatri"
+   },
+   "mocks": {
+    "web.extract": {
+     "summary": "From https://www.railyatri.in/live-train-status/16589, parts matching \"delay\": Davangere (DVG) 3:20 to 3:22 Mostly Delayed … Belagavi arrival 8:50 departure 8:55 on time",
+     "url": "https://www.railyatri.in/live-train-status/16589",
+     "matched_words": 1
+    },
+    "web.fetch": {
+     "summary": "From https://www.railyatri.in/live-train-status/16589, parts matching \"delay\": Davangere (DVG) 3:20 to 3:22 Mostly Delayed … Belagavi arrival 8:50 departure 8:55 on time",
+     "url": "https://www.railyatri.in/live-train-status/16589",
+     "matched_words": 1
+    }
+   },
+   "reply_contains": "Davangere"
+  },
+  {
+   "id": "web-research-01",
+   "group": "web",
+   "prompt": "What is the advance reservation period for Indian Railways tickets?",
+   "expect_includes": [
+    "web.research"
+   ],
+   "mocks": {
+    "web.research": {
+     "summary": "Research notes for \"advance reservation period\" (cite the source numbers):\nSource 1: Indian Railways ARP (https://indianrailways.gov.in/arp)\nThe advance reservation period is 60 days excluding the date of journey.",
+     "sources": [
+      {
+       "title": "Indian Railways ARP",
+       "url": "https://indianrailways.gov.in/arp"
+      }
+     ],
+     "count": 1
+    },
+    "web.search": {
+     "summary": "1. Indian Railways ARP (https://indianrailways.gov.in/arp): 60 days",
+     "results": []
+    }
+   },
+   "reply_contains": "60"
+  },
+  {
+   "id": "rem-interval-01",
+   "group": "reminders",
+   "prompt": "Check https://www.railyatri.in/live-train-status/16589 every 15 minutes and tell me if the train is delayed",
+   "expect_includes": [
+    "reminders.create"
+   ],
+   "expect_args": {
+    "every_minutes": 15
+   },
+   "mocks": {
+    "reminders.create": {
+     "summary": "Reminder \"Train 16589 delay check\" set: every 15 min, next on Wed 28 Oct, 3:15 PM.",
+     "id": "r9",
+     "scheduled": "every 15 min"
+    },
+    "web.extract": {
+     "summary": "From https://www.railyatri.in/live-train-status/16589, parts matching \"delay\": Davangere (DVG) 3:20 to 3:22 Mostly Delayed … Belagavi arrival 8:50 departure 8:55 on time",
+     "url": "https://www.railyatri.in/live-train-status/16589",
+     "matched_words": 1
+    }
+   },
+   "reply_contains": "15"
+  },
+  {
+   "id": "places-set-02",
+   "group": "places",
+   "prompt": "moengage is my office, set it as my office location",
+   "expect_includes": [
+    "places.set"
+   ],
+   "mocks": {
+    "places.set": {
+     "summary": "Saved place \"office\" at 12.93400, 77.61100.",
+     "id": "p3",
+     "label": "office",
+     "lat": 12.934,
+     "lng": 77.611
+    },
+    "device.location": {
+     "summary": "Last known location: latitude 12.93400, longitude 77.61100, 2 min ago.",
+     "lat": 12.934,
+     "lng": 77.611,
+     "age_min": 2
+    }
+   },
+   "reply_contains": "office"
   }
  ],
  "settings": {

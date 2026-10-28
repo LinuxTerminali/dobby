@@ -13,8 +13,17 @@ object Validator {
     data class ReplyIssue(val ungrounded: Set<String>)
 
     private val NUM = Regex("\\d[\\d,]*(?:\\.\\d+)?")
+    private val TIMEISH = Regex("\\b\\d{1,2}(?::\\d{1,4})+\\b")
+    private val TIME_OK = Regex("^\\d{1,2}:\\d{2}(?::\\d{2})?$")
+    private val WORD = Regex("[A-Za-z][A-Za-z0-9]{4,}")
 
     fun numbers(text: String): Set<String> = NUM.findAll(text).map { norm(it.value) }.toSet()
+
+    /** Clock times like 23:56, checked whole. Malformed ones ("23:000", "3:2:0000") are returned as-is and always fail. */
+    fun times(text: String): Set<String> = TIMEISH.findAll(text).map { it.value }.map { if (TIME_OK.matches(it)) it.trimStart('0').ifEmpty { "0" } else it }.toSet()
+
+    /** Longer words the user typed (names, places): candidates for dropped-character checks. */
+    fun userWords(text: String): Set<String> = WORD.findAll(text).map { it.value.lowercase() }.toSet()
 
     fun norm(n: String): String {
         val s = n.replace(",", "")
@@ -29,18 +38,25 @@ object Validator {
         return i == short.length
     }
 
-    /** Numeric args that look like corrupted copies of numbers in the user's text. */
+    /** Args that look like corrupted copies of what the user typed: numbers (365→35) or words (moengage→engage). */
     fun checkArgs(userText: String, args: JSONObject): List<ArgIssue> {
         val userNums = numbers(userText).filter { it.length >= 2 && !it.contains('.') }
-        if (userNums.isEmpty()) return emptyList()
+        val words = userWords(userText)
         val issues = mutableListOf<ArgIssue>()
         for (k in args.keys()) {
-            val v = args.get(k)
-            val s = when (v) { is Number -> norm(v.toString()); is String -> v.takeIf { Regex("^\\d{1,9}$").matches(it) } ?: continue; else -> continue }
-            if (s in userNums) continue
-            userNums.firstOrNull { isDroppedDigits(s, it) }?.let { issues += ArgIssue(k, s, it) }
+            when (val v = args.get(k)) {
+                is Number -> { val s = norm(v.toString()); if (s !in userNums) userNums.firstOrNull { isDroppedDigits(s, it) }?.let { issues += ArgIssue(k, s, it) } }
+                is String -> {
+                    if (Regex("^\\d{1,9}$").matches(v)) { if (v !in userNums) userNums.firstOrNull { isDroppedDigits(v, it) }?.let { issues += ArgIssue(k, v, it) } }
+                    else for (w in WORD.findAll(v).map { it.value.lowercase() }) {
+                        if (w in words) continue
+                        words.firstOrNull { u -> u.length >= 6 && isDroppedDigits(w, u) }?.let { issues += ArgIssue(k, w, it) }
+                    }
+                }
+                else -> {}
+            }
         }
-        return issues
+        return issues.distinct()
     }
 
     /**
@@ -49,7 +65,10 @@ object Validator {
      */
     fun checkReply(reply: String, sources: List<String>, todayNums: Set<String> = emptySet()): ReplyIssue? {
         val allowed = sources.flatMap { numbers(it) }.toSet() + todayNums.map { norm(it) }
-        val bad = numbers(reply).filter { it !in allowed && (it.toDoubleOrNull() ?: 99.0) > 12 }.toSet()
+        val badNums = numbers(reply).filter { it !in allowed && (it.toDoubleOrNull() ?: 99.0) > 12 }
+        val allowedTimes = sources.flatMap { times(it) }.filter { TIME_OK.matches(it) || TIME_OK.matches("0$it") }.toSet()
+        val badTimes = times(reply).filter { it !in allowedTimes }
+        val bad = (badNums + badTimes).toSet()
         return if (bad.isEmpty()) null else ReplyIssue(bad)
     }
 

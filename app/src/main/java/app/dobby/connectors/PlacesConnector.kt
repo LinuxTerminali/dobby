@@ -25,7 +25,7 @@ class PlacesConnector(private val context: Context) : Connector {
 
     override fun tools() = listOf(
         ToolSpec("list", "List saved places and their rules.", ToolSpec.schema(emptyList())),
-        ToolSpec("set", "Save or update a place. Give address to look it up (e.g. 'MoEngage, Bangalore'), or lat/lng, or neither to use the phone's current location.",
+        ToolSpec("set", "Save a named place (home, office, moengage…). Use for 'save this place as X', 'set X as my office', 'my current location is X'. Give address to look it up, or lat/lng, or neither to use the phone's current location.",
             ToolSpec.schema(listOf(Triple("label", "string", "e.g. home, office"), Triple("address", "string", "Place name or address to geocode"),
                 Triple("lat", "number", "Latitude"), Triple("lng", "number", "Longitude"),
                 Triple("radius_m", "number", "Radius in metres. Default 150")), listOf("label")), Effect.WRITE),

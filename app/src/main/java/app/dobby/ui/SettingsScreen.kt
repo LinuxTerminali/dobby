@@ -66,6 +66,10 @@ fun SettingsScreen() {
             }
         }
         Spacer(Modifier.height(16.dp))
+        SectionTitle("Web search")
+        var brave by remember { mutableStateOf(app.connectors.web().braveKey) }
+        OutlinedTextField(brave, { brave = it; app.connectors.web().braveKey = it }, label = { Text("Brave Search API key (optional; DuckDuckGo is used without it)") }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Accounts")
         OutlinedTextField(hf, { hf = it; app.models.hfToken = it }, label = { Text("Hugging Face token (for gated Gemma models)") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))

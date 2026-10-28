@@ -32,6 +32,20 @@ class ValidatorTest {
         assertNull(Validator.checkReply("You have 3 reminders and 2 places.", emptyList()))
     }
 
+    @Test fun argsFlagMangledUserWord() {
+        val issues = Validator.checkArgs("when I reach moengage remind me to drink water", JSONObject("""{"place":"engage","event":"enter"}"""))
+        assertEquals(1, issues.size); assertEquals("moengage", issues[0].expected)
+        assertTrue(Validator.checkArgs("when I reach moengage remind me", JSONObject("""{"place":"moengage"}""")).isEmpty())
+        assertTrue(Validator.checkArgs("remind me to drink water", JSONObject("""{"title":"drink water"}""")).isEmpty())
+    }
+
+    @Test fun replyFlagsCorruptedTimes() {
+        val src = listOf("Tumkur arr 23:56 dep 23:58; Davangere 3:20 to 3:22")
+        assertNull(Validator.checkReply("Tumkur 23:56 to 23:58", src))
+        val issue = Validator.checkReply("Tumkur 23:000 to 23:58, Davangere 3:2:0000", src)!!
+        assertTrue(issue.ungrounded.toString(), issue.ungrounded.contains("23:000"))
+    }
+
     @Test fun correctionsMentionTheNumbers() {
         val c = Validator.argCorrection(listOf(Validator.ArgIssue("days", "35", "365")))
         assertTrue(c.contains("365") && c.contains("days=35"))

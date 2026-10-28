@@ -32,7 +32,9 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
                 PromptBuilder.system(app, tools.map { it.name }), nativeTools = app.models.toolMode == "native", isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
             val out = StringBuilder()
             engine.send(PromptBuilder.withContext(app, prompt)).collect { if (it is ChatEvent.Token) out.append(it.text) }
-            ReminderReceiver.notify(app, notifId, title, out.toString().ifBlank { "(no answer)" }.take(1500))
+            val answer = out.toString().trim()
+            val quiet = answer.isBlank() || Regex("^(nothing|no change|no delay|no update|none)\\b", RegexOption.IGNORE_CASE).containsMatchIn(answer)
+            if (quiet) androidx.core.app.NotificationManagerCompat.from(app).cancel(notifId) else ReminderReceiver.notify(app, notifId, title, answer.take(1500))
             Result.success()
         } catch (e: Exception) {
             fail(app, notifId, title, e.message ?: e.toString())

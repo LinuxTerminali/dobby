@@ -55,11 +55,25 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   in replies and tool arguments (deterministic, both backends); kept only for comparison.
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
+## Web tools
+`web.search` (DuckDuckGo HTML, or Brave Search with a key in Settings), `web.fetch` (readable main text,
+JS pages rendered in a hidden WebView), `web.extract(url, query)` (the passages that match a question,
+for long pages and tables), `web.research(question)` (search → read top pages → relevant passages with
+numbered sources, in one call). Pages are cached per session. `TextExtract` and `SearchParse` are pure
+Kotlin with tests.
+
+## Scheduled checks
+`reminders.create` with `every_minutes` (min 15) and a `prompt` runs that prompt with tools on schedule;
+the job notifies only when the answer is not "NOTHING"/"no change". The protocol tells the model it can
+do this, so "check this page every 15 minutes" becomes a tool call.
+
 ## Validator
 Code checks the model's output every turn (`model/Validator`, pure Kotlin, tested):
 - A numeric tool argument that looks like a mangled copy of a number the user typed (365 → 35) blocks the
   call; the model is told the user's value and asked again.
-- Numbers in a reply must appear in the user's message, the tool results, or today's date; otherwise the
+- Numbers and clock times in a reply must appear in the user's message, the tool results, or today's date;
+  malformed times (23:000) always fail. String args that look like a word the user typed with characters
+  dropped (moengage → engage) block the call; otherwise the
   reply is regenerated once with the offending numbers named, and if still unverifiable it is shown with
   "⚠ Could not verify: …".
 - An empty tool result tells the model to try another listed tool before giving up.

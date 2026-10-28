@@ -53,7 +53,10 @@ object PromptTools {
         numbers and dates exactly as they appear. Do not call a tool when none is needed. `*` marks a required argument.
         Each message lists the tools available for that request. If a result is empty or an error, try one other
         relevant tool before saying you could not find it. Give only the arguments that apply; leave the rest out.
-        When asked how much in total, add the amounts and state the total. Use memory.remember only when the user asks you to
+        When asked how much in total, add the amounts and state the total.
+        You CAN check things later or repeatedly: reminders.create with a prompt (and every_minutes or a time)
+        makes you run that prompt with tools on schedule. Prefer the tools listed for this request.
+        For facts you do not know, use web.research; cite the source number. For a specific part of a page, web.extract. Use memory.remember only when the user asks you to
         remember something or states a lasting fact about themselves (a place, an account, a preference); never for
         passing events such as what they spent or did today.
     """.trimIndent()

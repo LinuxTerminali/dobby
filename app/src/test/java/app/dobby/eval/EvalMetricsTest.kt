@@ -79,7 +79,7 @@ class EvalMetricsTest {
         val f = listOf("src/main/assets/golden.json", "app/src/main/assets/golden.json").map(::File).first { it.exists() }
         val cases = JSONObject(f.readText()).getJSONArray("cases")
         val known = setOf("calls.recent","calls.missed","calls.with","sms.search","sms.recent","gmail.search","gmail.read","docs.read","sheets.read",
-            "web.fetch","device.now","device.location","reminders.create","reminders.list","reminders.delete",
+            "web.search","web.fetch","web.extract","web.research","device.now","device.location","reminders.create","reminders.list","reminders.delete",
             "places.list","places.set","places.add_rule","places.events","places.delete","memory.remember","memory.recall","memory.forget","memory.profile")
         val ids = mutableSetOf<String>()
         for (i in 0 until cases.length()) {
