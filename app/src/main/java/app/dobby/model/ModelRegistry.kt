@@ -1,6 +1,7 @@
 package app.dobby.model
 
 import android.content.Context
+import android.os.Environment
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -9,7 +10,26 @@ import java.io.File
 class ModelRegistry(private val context: Context) {
     private val prefs = context.getSharedPreferences("models", Context.MODE_PRIVATE)
 
-    val modelsDir: File get() = File(context.getExternalFilesDir(null), "models").apply { mkdirs() }
+    /** App-private folder: deleted on uninstall. */
+    val privateDir: File get() = File(context.getExternalFilesDir(null), "models").apply { mkdirs() }
+    /** Shared folder: survives uninstall. Readable only with "All files access". */
+    val sharedDir: File get() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Dobby/models")
+    fun sharedAllowed() = Environment.isExternalStorageManager()
+    val modelsDir: File get() = if (sharedAllowed()) sharedDir.apply { mkdirs() } else privateDir
+
+    /** Move any models from the private folder into the shared one (after the permission is granted). */
+    fun migrateToShared(): Int {
+        if (!sharedAllowed()) return 0
+        sharedDir.mkdirs()
+        var n = 0
+        privateDir.listFiles()?.filter { it.isFile && it.length() > 1_000_000 }?.forEach { f ->
+            val dst = File(sharedDir, f.name)
+            if (dst.exists() && dst.length() == f.length()) { f.delete(); return@forEach }
+            val ok = f.renameTo(dst) || runCatching { f.copyTo(dst, overwrite = true); f.delete(); true }.getOrDefault(false)
+            if (ok) n++
+        }
+        return n
+    }
 
     fun builtIn(): List<ModelEntry> {
         val json = context.assets.open("models.json").bufferedReader().readText()
@@ -33,8 +53,22 @@ class ModelRegistry(private val context: Context) {
         prefs.edit().putString("custom", JSONArray(custom().filter { it.id != id }.map { it.toJson() }).toString()).apply()
     }
 
-    fun fileFor(e: ModelEntry) = File(modelsDir, e.file)
+    /** Prefer the shared copy when it exists, else the private one. */
+    fun fileFor(e: ModelEntry): File {
+        val shared = File(sharedDir, e.file)
+        return if (sharedAllowed() && shared.exists()) shared else File(privateDir, e.file).let { if (it.exists() || !sharedAllowed()) it else shared }
+    }
     fun isDownloaded(e: ModelEntry) = fileFor(e).let { it.exists() && it.length() > 1_000_000 }
+
+    /** Per-model backend override ("gpu"/"cpu"); null = the registry default. */
+    fun backendOverride(id: String): String? = prefs.getString("backend:$id", null)
+    fun setBackendOverride(id: String, backend: String?) = prefs.edit().apply { if (backend == null) remove("backend:$id") else putString("backend:$id", backend) }.apply()
+    fun withBackend(e: ModelEntry): ModelEntry = backendOverride(e.id)?.let { e.copy(backend = it) } ?: e
+
+    /** "prompt" (default: app parses TOOL lines) or "native" (runtime tool calling). */
+    var toolMode: String
+        get() = prefs.getString("tool_mode", "prompt") ?: "prompt"
+        set(v) = prefs.edit().putString("tool_mode", v).apply()
 
     var selectedId: String?
         get() = prefs.getString("selected", null)

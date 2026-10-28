@@ -5,11 +5,34 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -17,7 +40,12 @@ import androidx.compose.ui.unit.dp
 import app.dobby.reminders.Reminder
 import app.dobby.reminders.ReminderScheduler
 import app.dobby.reminders.ReminderStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
+
+private val NEXT_FMT = SimpleDateFormat("EEE d MMM, h:mm a", Locale.US)
 
 @Composable
 fun RemindersScreen() {
@@ -29,31 +57,28 @@ fun RemindersScreen() {
     val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     val exactOk = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Reminders", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            TextButton(onClick = { showAdd = true }) { Text("Add") }
-        }
-        Text("Alarm-clock style: the phone wakes only at the set time. A reminder with a prompt also runs the model with your tools and shows the answer.", style = MaterialTheme.typography.bodySmall)
-        if (!exactOk) TextButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) }) { Text("Allow exact alarms (otherwise ±10 min)") }
-        Spacer(Modifier.height(8.dp))
-        key(tick) {
-            LazyColumn {
-                items(store.all()) { r ->
-                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(r.title, style = MaterialTheme.typography.titleMedium)
-                                Text(r.describe(), style = MaterialTheme.typography.bodySmall)
-                                if (r.prompt.isNotBlank()) Text("runs: ${r.prompt}", style = MaterialTheme.typography.labelSmall)
-                                r.nextTrigger()?.let { Text("next: ${java.util.Date(it)}", style = MaterialTheme.typography.labelSmall) }
-                            }
-                            Switch(checked = r.enabled, onCheckedChange = { on -> val u = r.copy(enabled = on); store.upsert(u); scheduler.schedule(u); tick++ })
-                            TextButton(onClick = { scheduler.cancel(r.id); store.delete(r.id); tick++ }) { Text("Delete") }
-                        }
+    key(tick) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Hint("The phone wakes only at the set time. A reminder with a prompt also runs the model and shows the answer.", Modifier.weight(1f))
+                    TextButton(onClick = { showAdd = true }) { Text("Add") }
+                }
+                if (!exactOk) FilledTonalButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) }) { Text("Allow exact alarms") }
+            }
+            val all = store.all()
+            if (all.isEmpty()) item { Hint("No reminders. Tell Dobby in chat, e.g. “remind me every weekday at 8 to check bills”.") }
+            items(all) { r ->
+                DobbyCard {
+                    TitleRow(r.title, r.describe() + (r.nextTrigger()?.let { " · next " + NEXT_FMT.format(Date(it)) } ?: "")) {
+                        Switch(checked = r.enabled, onCheckedChange = { on -> val u = r.copy(enabled = on); store.upsert(u); scheduler.schedule(u); tick++ })
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(onClick = { scheduler.cancel(r.id); store.delete(r.id); tick++ }) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
                     }
+                    if (r.prompt.isNotBlank()) Hint("Runs: ${r.prompt}", Modifier.padding(top = 6.dp))
                 }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
     if (showAdd) AddReminderDialog(onDismiss = { showAdd = false }) { r -> store.upsert(r); scheduler.schedule(r); showAdd = false; tick++ }

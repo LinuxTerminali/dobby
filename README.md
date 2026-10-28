@@ -10,7 +10,13 @@ First cut, **not yet compiled**: this tree was written without an Android SDK at
 Expect a round of compile fixes on the first CI run, most likely in `LiteRtLmEngine.kt`
 (LiteRT-LM API surface) and Compose imports. Everything else is plain Android/Kotlin.
 
-## Build
+## Build and updates
+- Models: grant "All files access" (Models tab banner) and they live in `Download/Dobby/models`,
+  which survives uninstall. Without it they sit in the app's private folder and go with the app.
+- Debug builds are signed with the committed `app/debug.keystore` (standard Android debug password),
+  so `adb install -r` upgrades in place. The first install after this change needs one uninstall.
+- Every push to `main` publishes a GitHub Release `build-N` with the APK; `N` is the app's versionCode.
+  Settings → Check for updates downloads it. Play Protect may block the install; ADB never is.
 - CI: `.github/workflows/android.yml` builds `app-debug.apk` on push to `main`
   (no Gradle wrapper needed; it uses `gradle/actions/setup-gradle`).
 - Local: Android Studio, or `gradle wrapper && ./gradlew assembleDebug`.
@@ -40,6 +46,41 @@ location/    Places with geofence rules (Play services), GeofenceReceiver → As
 reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, AssistantJob (WorkManager)
              that wakes the model for reminders that carry a prompt
 ```
+
+## Tool calling modes
+- `prompt` (default): the model gets a compact tool catalog in the system prompt and replies with one
+  `TOOL {"name":…,"args":{…}}` line; the app parses it, runs the connector, feeds `TOOL_RESULT` back,
+  loops up to 5 times. The runtime sees a plain conversation.
+- `native`: LiteRT-LM's own tool path. On a Pixel 9 with Gemma 4 E4B this corrupted digits and ids
+  in replies and tool arguments (deterministic, both backends); kept only for comparison.
+  Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
+
+## Permissions
+Tools declare an effect: READ, WRITE, DESTRUCTIVE. Destructive calls (`memory.forget`, `reminders.delete`,
+`places.delete`) pause the turn and show Allow / Always allow / Deny in chat; a denied call returns an error the
+model must report. Always-allow rules live in Settings → Permissions. Evals auto-approve; scheduled jobs deny.
+
+## Tool results
+Every tool returns a `summary` sentence in human form (dates as "Sun 26 Oct, 9:01 PM", amounts with Indian
+grouping, durations as "10 min") plus the structured data. The model sees the summary first and copies it,
+instead of rewriting raw timestamps. `util/Fmt` is pure Kotlin and unit-tested.
+
+## Tool routing
+`ToolRouter` picks 3–6 tools per turn from keyword groups (calls, sms, gmail, docs, web, device, reminders,
+places, memory); `memory.recall` is always included; no match → all tools. The system prompt holds only the
+protocol; the chosen catalog travels with each user message, so the cached prefix stays small. The chat trace
+shows `router: offered n/N`.
+
+## Eval
+- `assets/golden.json`: 32 synthetic cases across calls, sms, gmail, docs, sheets, web, device, reminders, places,
+  memory, general. Every tool call is answered from the case's `mocks`, so runs are deterministic and need no
+  permissions or network. Real data never goes in this file.
+- Run from the app (Models → Run eval) or from a computer: `scripts/eval.sh [model-id]`.
+- Output: `eval/<model>-<stamp>.csv` (per-case metrics) and `.txt` (summary + failures) under the app's files dir.
+- Metrics: first tool correct, args match, trajectory match, calls to tools not offered, reply contains, numbers
+  grounded in prompt/tool output, time to first token, total latency, load time, PSS, battery.
+- `EvalMetrics` is pure Kotlin and unit-tested (`./gradlew testDebugUnitTest`, also run in CI before the APK build).
+- Record the baseline score in a PR before changing the router, prompts or model.
 
 ## Add a connector
 Implement `Connector` (id, title, requirement, `tools()`, `call()`), add it to

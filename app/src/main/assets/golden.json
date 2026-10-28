@@ -1,9 +1,599 @@
 {
-  "cases": [
-    {"prompt": "What is the date today? Use the device tool.", "expect_tool": "device.now"},
-    {"prompt": "Extract JSON with amount_inr, last4, direction from: 'Rs.1,240.00 debited from A/c XX1234 on 05-10-26 to SWIGGY. Avl Bal Rs.1,16,810.10'. Reply with JSON only.", "expect_substring": "1240"},
-    {"prompt": "From the same SMS, what is the available balance as a plain number?", "expect_substring": "116810"},
-    {"prompt": "Did I miss any calls this week? Check the call log.", "expect_tool": "calls.missed"},
-    {"prompt": "Find my latest SMS mentioning BESCOM.", "expect_tool": "sms.search"}
+ "version": 1,
+ "note": "Synthetic data only. Tool calls are answered from each case's mocks.",
+ "cases": [
+  {
+   "id": "calls-with-01",
+   "group": "calls",
+   "prompt": "When did I last call Shubham?",
+   "expect_tool": "calls.with",
+   "expect_args": {
+    "who": "~shubham"
+   },
+   "mocks": {
+    "calls.with": {
+     "calls": [
+      {
+       "name": "Shubham Chhabra",
+       "number": "+919058700000",
+       "type": "outgoing",
+       "at": "2026-10-26 21:01",
+       "duration_s": 100
+      }
+     ],
+     "count": 1
+    }
+   },
+   "reply_contains": "26"
+  },
+  {
+   "id": "calls-missed-01",
+   "group": "calls",
+   "prompt": "Did I miss any calls this week?",
+   "expect_tool": "calls.missed",
+   "mocks": {
+    "calls.missed": {
+     "calls": [
+      {
+       "name": "Priya",
+       "number": "+919811100000",
+       "type": "missed",
+       "at": "2026-10-25 14:12",
+       "duration_s": 0
+      }
+     ],
+     "count": 1
+    }
+   },
+   "reply_contains": "Priya"
+  },
+  {
+   "id": "calls-recent-01",
+   "group": "calls",
+   "prompt": "Show my last 5 calls",
+   "expect_tool": "calls.recent",
+   "expect_args": {
+    "limit": 5
+   },
+   "mocks": {
+    "calls.recent": {
+     "calls": [
+      {
+       "name": "Amit",
+       "number": "+919900000001",
+       "type": "incoming",
+       "at": "2026-10-27 09:30",
+       "duration_s": 45
+      },
+      {
+       "name": "Mom",
+       "number": "+919900000002",
+       "type": "outgoing",
+       "at": "2026-10-26 20:00",
+       "duration_s": 600
+      }
+     ],
+     "count": 2
+    }
+   },
+   "reply_contains": "Amit"
+  },
+  {
+   "id": "calls-with-02",
+   "group": "calls",
+   "prompt": "How long did I talk to Mom yesterday?",
+   "expect_tool": "calls.with",
+   "expect_args": {
+    "who": "~mom"
+   },
+   "mocks": {
+    "calls.with": {
+     "calls": [
+      {
+       "name": "Mom",
+       "number": "+919900000002",
+       "type": "outgoing",
+       "at": "2026-10-26 20:00",
+       "duration_s": 600
+      }
+     ],
+     "count": 1
+    }
+   },
+   "reply_contains": "600"
+  },
+  {
+   "id": "sms-search-01",
+   "group": "sms",
+   "prompt": "Find my latest SMS from BESCOM",
+   "expect_tool": "sms.search",
+   "expect_args": {
+    "query": "~bescom"
+   },
+   "mocks": {
+    "sms.search": {
+     "messages": [
+      {
+       "from": "VM-BESCOM",
+       "at": "2026-10-15 10:02",
+       "body": "Your BESCOM bill of Rs.2,140.00 for Oct 2026 is due on 28-10-2026."
+      }
+     ],
+     "count": 1
+    },
+    "sms.recent": {
+     "messages": [
+      {
+       "from": "VM-BESCOM",
+       "at": "2026-10-15 10:02",
+       "body": "Your BESCOM bill of Rs.2,140.00 for Oct 2026 is due on 28-10-2026."
+      }
+     ],
+     "count": 1
+    }
+   },
+   "reply_contains": "2,140"
+  },
+  {
+   "id": "sms-search-02",
+   "group": "sms",
+   "prompt": "How much did I spend on Swiggy this month? Check SMS.",
+   "expect_tool": "sms.search",
+   "expect_args": {
+    "query": "~swiggy"
+   },
+   "mocks": {
+    "sms.search": {
+     "messages": [
+      {
+       "from": "VM-HDFCBK",
+       "at": "2026-10-05 20:45",
+       "body": "Rs.640.00 debited from A/c XX1234 to SWIGGY. Avl Bal Rs.1,16,810.10"
+      },
+      {
+       "from": "VM-HDFCBK",
+       "at": "2026-10-19 21:10",
+       "body": "Rs.355.00 debited from A/c XX1234 to SWIGGY. Avl Bal Rs.74,455.10"
+      }
+     ],
+     "count": 2
+    }
+   },
+   "reply_contains": "995",
+   "extra_numbers": [
+    "995"
+   ]
+  },
+  {
+   "id": "sms-recent-01",
+   "group": "sms",
+   "prompt": "What are my most recent messages?",
+   "expect_tool": "sms.recent",
+   "mocks": {
+    "sms.recent": {
+     "messages": [
+      {
+       "from": "AD-AIRTEL",
+       "at": "2026-10-27 08:00",
+       "body": "Your Airtel bill of Rs 799.00 is due by 30-10-2026."
+      }
+     ],
+     "count": 1
+    }
+   },
+   "reply_contains": "Airtel"
+  },
+  {
+   "id": "sms-extract-01",
+   "group": "sms",
+   "prompt": "Extract JSON with amount_inr, last4 and direction from this SMS, reply JSON only: 'Rs.1,240.00 debited from A/c XX1234 on 05-10-26 to SWIGGY. Avl Bal Rs.1,16,810.10'",
+   "no_tool": true,
+   "reply_contains": "1240"
+  },
+  {
+   "id": "sms-extract-02",
+   "group": "sms",
+   "prompt": "From 'INR 95,000.00 credited to A/c XX1234 on 01-10-26 by SALARY. Avl Bal INR 1,32,450.10', what is the available balance as a plain number?",
+   "no_tool": true,
+   "reply_contains": "132450"
+  },
+  {
+   "id": "gmail-search-01",
+   "group": "gmail",
+   "prompt": "Find emails from Airtel about my bill",
+   "expect_tool": "gmail.search",
+   "expect_args": {
+    "query": "~airtel"
+   },
+   "mocks": {
+    "gmail.search": {
+     "messages": [
+      {
+       "id": "18f2a",
+       "from": "Airtel <ebill@airtel.com>",
+       "subject": "Your Airtel bill Rs 799",
+       "date": "Mon, 16 Oct 2026",
+       "snippet": "Bill of Rs 799.00 due 30 Oct"
+      }
+     ],
+     "count": 1
+    }
+   },
+   "reply_contains": "799"
+  },
+  {
+   "id": "gmail-read-01",
+   "group": "gmail",
+   "prompt": "Read the email with id 18f2a",
+   "expect_tool": "gmail.read",
+   "expect_args": {
+    "id": "18f2a"
+   },
+   "mocks": {
+    "gmail.read": {
+     "id": "18f2a",
+     "from": "Airtel",
+     "subject": "Your Airtel bill Rs 799",
+     "date": "Mon, 16 Oct 2026",
+     "body": "Your bill of Rs 799.00 for October is due by 30 Oct 2026. Autopay is active."
+    }
+   },
+   "reply_contains": "30 Oct"
+  },
+  {
+   "id": "docs-read-01",
+   "group": "docs",
+   "prompt": "Read my Google Doc with id 1AbCdEfG and tell me the title",
+   "expect_tool": "docs.read",
+   "expect_args": {
+    "document_id": "1AbCdEfG"
+   },
+   "mocks": {
+    "docs.read": {
+     "title": "Kolhapur trip plan",
+     "text": "Leave 28 Oct night. Call at 10 on 29th."
+    }
+   },
+   "reply_contains": "Kolhapur"
+  },
+  {
+   "id": "sheets-read-01",
+   "group": "sheets",
+   "prompt": "What's in Sheet1!A1:B3 of spreadsheet 1XyZ?",
+   "expect_tool": "sheets.read",
+   "expect_args": {
+    "spreadsheet_id": "1XyZ"
+   },
+   "mocks": {
+    "sheets.read": {
+     "range": "Sheet1!A1:B3",
+     "values": [
+      [
+       "Item",
+       "Cost"
+      ],
+      [
+       "Rent",
+       "42000"
+      ],
+      [
+       "SIP",
+       "15000"
+      ]
+     ]
+    }
+   },
+   "reply_contains": "42000"
+  },
+  {
+   "id": "web-fetch-01",
+   "group": "web",
+   "prompt": "Fetch https://example.com and tell me what it says",
+   "expect_tool": "web.fetch",
+   "expect_args": {
+    "url": "~example.com"
+   },
+   "mocks": {
+    "web.fetch": {
+     "url": "https://example.com",
+     "text": "Example Domain. This domain is for use in illustrative examples in documents."
+    }
+   },
+   "reply_contains": "Example"
+  },
+  {
+   "id": "web-fetch-02",
+   "group": "web",
+   "prompt": "Summarise this page: https://en.wikipedia.org/wiki/Hatkanangale",
+   "expect_tool": "web.fetch",
+   "expect_args": {
+    "url": "~hatkanangale"
+   },
+   "mocks": {
+    "web.fetch": {
+     "url": "https://en.wikipedia.org/wiki/Hatkanangale",
+     "text": "Hatkanangale is a town in Kolhapur district, Maharashtra. It has a railway junction on the Pune–Miraj–Kolhapur line."
+    }
+   },
+   "reply_contains": "Kolhapur"
+  },
+  {
+   "id": "device-now-01",
+   "group": "device",
+   "prompt": "What's the date today?",
+   "expect_tool": "device.now",
+   "mocks": {
+    "device.now": {
+     "now": "Tuesday 2026-10-27 09:40"
+    }
+   },
+   "reply_contains": "27"
+  },
+  {
+   "id": "device-loc-01",
+   "group": "device",
+   "prompt": "Where am I right now?",
+   "expect_tool": "device.location",
+   "mocks": {
+    "device.location": {
+     "lat": 12.9189,
+     "lng": 77.6756,
+     "age_min": 3
+    }
+   },
+   "reply_contains": "12.9"
+  },
+  {
+   "id": "rem-recurring-01",
+   "group": "reminders",
+   "prompt": "Remind me every weekday at 8 to check bills",
+   "expect_tool": "reminders.create",
+   "expect_args": {
+    "hour": 8
+   },
+   "mocks": {
+    "reminders.create": {
+     "id": "r1",
+     "scheduled": "08:00 on Mon,Tue,Wed,Thu,Fri",
+     "next": 1761532800000
+    }
+   },
+   "reply_contains": "8"
+  },
+  {
+   "id": "rem-place-01",
+   "group": "reminders",
+   "prompt": "Remind me to eat an apple when I reach office",
+   "expect_tool": "reminders.create",
+   "expect_args": {
+    "place": "~office",
+    "event": "enter"
+   },
+   "mocks": {
+    "reminders.create": {
+     "id": "r2",
+     "scheduled": "on enter office",
+     "place": "office"
+    }
+   },
+   "reply_contains": "office"
+  },
+  {
+   "id": "rem-place-02",
+   "group": "reminders",
+   "prompt": "When I leave home, remind me to take the keys",
+   "expect_tool": "reminders.create",
+   "expect_args": {
+    "place": "~home",
+    "event": "exit"
+   },
+   "mocks": {
+    "reminders.create": {
+     "id": "r3",
+     "scheduled": "on exit home",
+     "place": "home"
+    }
+   },
+   "reply_contains": "keys"
+  },
+  {
+   "id": "rem-list-01",
+   "group": "reminders",
+   "prompt": "What reminders do I have?",
+   "expect_tool": "reminders.list",
+   "mocks": {
+    "reminders.list": {
+     "reminders": [
+      {
+       "id": "r1",
+       "title": "Check bills",
+       "when": "08:00 on Mon,Tue,Wed,Thu,Fri",
+       "enabled": true
+      }
+     ]
+    }
+   },
+   "reply_contains": "bills"
+  },
+  {
+   "id": "rem-delete-01",
+   "group": "reminders",
+   "prompt": "Delete reminder r1",
+   "expect_tool": "reminders.delete",
+   "expect_args": {
+    "id": "r1"
+   },
+   "mocks": {
+    "reminders.delete": {
+     "deleted": "r1"
+    }
+   },
+   "reply_contains": "r1"
+  },
+  {
+   "id": "rem-oneoff-01",
+   "group": "reminders",
+   "prompt": "Remind me in 2 hours to call the landlord",
+   "expect_tool": "reminders.create",
+   "mocks": {
+    "reminders.create": {
+     "id": "r4",
+     "scheduled": "once",
+     "next": 1761540000000
+    },
+    "device.now": {
+     "now": "Tuesday 2026-10-27 21:30"
+    }
+   },
+   "reply_contains": "landlord",
+   "expect_args": {
+    "title": "~landlord"
+   }
+  },
+  {
+   "id": "places-set-01",
+   "group": "places",
+   "prompt": "Save this place as office",
+   "expect_args": {
+    "label": "~office"
+   },
+   "mocks": {
+    "places.set": {
+     "id": "p1",
+     "label": "office",
+     "lat": 12.9189,
+     "lng": 77.6756,
+     "radius_m": 150
+    },
+    "device.location": {
+     "lat": 12.9189,
+     "lng": 77.6756,
+     "age_min": 2
+    }
+   },
+   "reply_contains": "office",
+   "expect_includes": [
+    "places.set"
+   ]
+  },
+  {
+   "id": "places-list-01",
+   "group": "places",
+   "prompt": "Which places have I saved?",
+   "expect_tool": "places.list",
+   "mocks": {
+    "places.list": {
+     "places": [
+      {
+       "id": "p1",
+       "label": "office",
+       "lat": 12.9189,
+       "lng": 77.6756,
+       "rules_text": []
+      },
+      {
+       "id": "p2",
+       "label": "home",
+       "lat": 12.95,
+       "lng": 77.7,
+       "rules_text": [
+        "exit Mon,Tue,Wed,Thu,Fri 8:00–11:00 → Leaving for office?"
+       ]
+      }
+     ]
+    }
+   },
+   "reply_contains": "home"
+  },
+  {
+   "id": "places-events-01",
+   "group": "places",
+   "prompt": "When did I leave home today?",
+   "expect_tool": "places.events",
+   "mocks": {
+    "places.events": {
+     "events": [
+      {
+       "place_id": "p2",
+       "label": "home",
+       "type": "exit",
+       "at": 1761532200000,
+       "at_text": "Tue Oct 27 08:50:00 IST 2026"
+      }
+     ]
+    }
+   },
+   "reply_contains": "8:50"
+  },
+  {
+   "id": "mem-remember-01",
+   "group": "memory",
+   "prompt": "Remember that my office map pin is wrong, use the north gate",
+   "expect_tool": "memory.remember",
+   "expect_args": {
+    "text": "~north gate"
+   },
+   "mocks": {
+    "memory.remember": {
+     "id": 7,
+     "text": "Office map pin is wrong; use the north gate",
+     "tags": "office",
+     "source": "model"
+    }
+   }
+  },
+  {
+   "id": "mem-recall-01",
+   "group": "memory",
+   "prompt": "What do you know about my office?",
+   "expect_tool": "memory.recall",
+   "expect_args": {
+    "query": "~office"
+   },
+   "mocks": {
+    "memory.recall": {
+     "facts": [
+      {
+       "id": 7,
+       "text": "Office map pin is wrong; use the north gate",
+       "tags": "office",
+       "source": "user"
+      }
+     ]
+    }
+   },
+   "reply_contains": "north gate"
+  },
+  {
+   "id": "mem-noinfer-01",
+   "group": "memory",
+   "prompt": "My cab fare to office was 180 today",
+   "expect_trajectory": [],
+   "no_tool": true
+  },
+  {
+   "id": "gen-hello-01",
+   "group": "general",
+   "prompt": "hello",
+   "no_tool": true
+  },
+  {
+   "id": "gen-thanks-01",
+   "group": "general",
+   "prompt": "thanks, that's all",
+   "no_tool": true
+  },
+  {
+   "id": "gen-cando-01",
+   "group": "general",
+   "prompt": "what can you do?",
+   "no_tool": true
+  }
+ ],
+ "settings": {
+  "places": [
+   "home",
+   "office"
   ]
+ }
 }

@@ -3,6 +3,7 @@ package app.dobby.model
 import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import java.io.File
 
 /**
@@ -22,7 +23,10 @@ class ModelDownloader(private val context: Context, private val registry: ModelR
             .setTitle(e.name)
             .setDescription("Model download")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            .setDestinationInExternalFilesDir(context, null, "models/${e.file}")
+            .apply {
+                if (registry.sharedAllowed()) setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Dobby/models/${e.file}")
+                else setDestinationInExternalFilesDir(context, null, "models/${e.file}")
+            }
             .setAllowedOverMetered(false)
         val token = registry.hfToken
         if (token.isNotBlank()) req.addRequestHeader("Authorization", "Bearer $token")

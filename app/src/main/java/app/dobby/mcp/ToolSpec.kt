@@ -2,11 +2,15 @@ package app.dobby.mcp
 
 import org.json.JSONObject
 
+/** What a tool does to the world. DESTRUCTIVE calls need the user's approval unless always-allowed. */
+enum class Effect { READ, WRITE, DESTRUCTIVE }
+
 /** One tool the model can call. `parameters` is a JSON Schema object (MCP inputSchema). */
 data class ToolSpec(
     val name: String,
     val description: String,
     val parameters: JSONObject,
+    val effect: Effect = Effect.READ,
 ) {
     /** MCP `tools/list` shape. */
     fun toMcpJson(): JSONObject = JSONObject()

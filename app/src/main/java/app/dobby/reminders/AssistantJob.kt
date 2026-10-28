@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.dobby.App
+import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
@@ -23,11 +24,12 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
         val entry = app.models.all().firstOrNull { it.id == app.models.selectedId } ?: return fail(app, notifId, title, "no model selected")
         if (!app.models.isDownloaded(entry)) return fail(app, notifId, title, "model not downloaded")
         val engine = EngineHolder.get(app)
+        Approvals.headless = true
         return try {
             val tools = app.router.listTools()
             engine.load(entry, app.models.fileFor(entry).absolutePath, tools,
                 ToolExecutor { n, a -> app.router.callTool(n, a) },
-                PromptBuilder.system(app, tools.map { it.name }))
+                PromptBuilder.system(app, tools.map { it.name }), nativeTools = app.models.toolMode == "native", isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
             val out = StringBuilder()
             engine.send(PromptBuilder.withContext(app, prompt)).collect { if (it is ChatEvent.Token) out.append(it.text) }
             ReminderReceiver.notify(app, notifId, title, out.toString().ifBlank { "(no answer)" }.take(1500))
@@ -35,6 +37,7 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
         } catch (e: Exception) {
             fail(app, notifId, title, e.message ?: e.toString())
         } finally {
+            Approvals.headless = false
             runCatching { engine.close() }
         }
     }

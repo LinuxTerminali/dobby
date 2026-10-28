@@ -37,7 +37,7 @@ class BrowserConnector(private val context: Context) : Connector {
         val url = args.getString("url")
         require(url.startsWith("http")) { "url must start with http(s)://" }
         val text = withTimeoutOrNull(30_000) { render(url) } ?: return JSONObject().put("url", url).put("error", "timed out after 30s")
-        return JSONObject().put("url", url).put("text", text.take(8000))
+        return JSONObject().put("summary", "Page $url says: ${text.take(700)}").put("url", url).put("text", text.take(8000))
     }
 
     @SuppressLint("SetJavaScriptEnabled")

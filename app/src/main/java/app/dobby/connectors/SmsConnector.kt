@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
 import app.dobby.mcp.ToolSpec
+import app.dobby.util.Fmt
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -21,12 +22,12 @@ class SmsConnector(private val context: Context) : Connector {
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
 
     override fun tools() = listOf(
-        ToolSpec("search", "Search SMS bodies and senders for a word or phrase.",
+        ToolSpec("search", "Search SMS by sender or keyword, e.g. 'BESCOM', 'Swiggy', 'debited'. Use this whenever a sender or topic is named.",
             ToolSpec.schema(listOf(
                 Triple("query", "string", "Text to match, e.g. 'BESCOM' or 'debited'"),
                 Triple("days", "integer", "Look back this many days. Default 30"),
                 Triple("limit", "integer", "Max rows. Default 20")), listOf("query"))),
-        ToolSpec("recent", "Most recent SMS.",
+        ToolSpec("recent", "Most recent SMS from anyone, newest first. Not for finding a specific sender.",
             ToolSpec.schema(listOf(Triple("limit", "integer", "Max rows. Default 20")))),
     )
 
@@ -45,14 +46,16 @@ class SmsConnector(private val context: Context) : Connector {
             while (c.moveToNext() && arr.length() < limit) {
                 val body = c.getString(1) ?: ""
                 if (OTP.containsMatchIn(body)) continue   // never hand OTPs to the model
-                arr.put(JSONObject().put("from", c.getString(0)).put("at", FMT.format(Date(c.getLong(2)))).put("body", body))
+                arr.put(JSONObject().put("from", c.getString(0)).put("at", Fmt.dateTime(c.getLong(2))).put("body", body))
             }
         }
-        return JSONObject().put("messages", arr).put("count", arr.length())
+        val summary = if (arr.length() == 0) "No SMS found." else (0 until minOf(arr.length(), 6)).joinToString(" ") { i ->
+            val m = arr.getJSONObject(i); "From ${m.getString("from")} on ${m.getString("at")}: \"${m.getString("body").take(200)}\""
+        } + if (arr.length() > 6) " (+${arr.length() - 6} more)" else ""
+        return JSONObject().put("summary", summary).put("messages", arr).put("count", arr.length())
     }
 
     companion object {
         private val OTP = Regex("\\bOTP\\b|one[- ]time[- ]pass", RegexOption.IGNORE_CASE)
-        private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
     }
 }

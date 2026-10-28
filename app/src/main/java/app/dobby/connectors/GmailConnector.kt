@@ -35,13 +35,17 @@ class GmailConnector(private val context: Context, private val auth: GoogleAuth)
                 val h = headers(m)
                 out.put(JSONObject().put("id", m.getString("id")).put("from", h["From"]).put("subject", h["Subject"]).put("date", h["Date"]).put("snippet", m.optString("snippet")))
             }
-            JSONObject().put("messages", out).put("count", out.length())
+            val summary = if (out.length() == 0) "No emails found." else (0 until out.length()).joinToString(" ") { i ->
+                val m = out.getJSONObject(i); "Email ${m.optString("id")} from ${m.optString("from")} on ${m.optString("date")}: \"${m.optString("subject")}\" — ${m.optString("snippet").take(120)}"
+            }
+            JSONObject().put("summary", summary).put("messages", out).put("count", out.length())
         }
         "read" -> {
             val m = JSONObject(auth.get("$BASE/messages/${args.getString("id")}?format=full"))
             val h = headers(m)
-            JSONObject().put("id", m.getString("id")).put("from", h["From"]).put("subject", h["Subject"]).put("date", h["Date"])
-                .put("body", bodyText(m.getJSONObject("payload")).take(8000))
+            val body = bodyText(m.getJSONObject("payload")).take(8000)
+            JSONObject().put("summary", "Email from ${h["From"]} on ${h["Date"]}, subject \"${h["Subject"]}\". Body: ${body.take(600)}")
+                .put("id", m.getString("id")).put("from", h["From"]).put("subject", h["Subject"]).put("date", h["Date"]).put("body", body)
         }
         else -> throw IllegalArgumentException("unknown tool $tool")
     }

@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.dobby.App
 import app.dobby.memory.PromptBuilder
+import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
@@ -21,26 +22,29 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val messages = mutableStateListOf<ChatMessage>()
     val status = mutableStateOf("No model loaded")
     val busy = mutableStateOf(false)
+    /** A destructive tool call waiting for the user: (approval id, tool, args). */
+    val pendingApproval = mutableStateOf<Triple<String, String, String>?>(null)
     private var loadedSignature: String? = null
     private var nextId = 1L
 
     /** Reload when the selected model or the active tool set changed. */
     private suspend fun ensureLoaded(): Boolean {
-        val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }
+        val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }?.let { app.models.withBackend(it) }
         if (entry == null) { status.value = "Pick a model in the Models tab"; return false }
         if (!app.models.isDownloaded(entry)) { status.value = "Model not downloaded: ${entry.name}"; return false }
         val tools = app.router.listTools()
-        val sig = entry.id + "|" + tools.joinToString(",") { it.name }
+        val sig = entry.id + "|" + entry.backend + "|" + app.models.toolMode + "|" + tools.joinToString(",") { it.name }
         if (sig == loadedSignature && EngineHolder.get(app).loadedModel != null) return true
         status.value = "Loading ${entry.name}…"
         val executor = ToolExecutor { name, args -> app.router.callTool(name, args) }
         try {
-            EngineHolder.get(app).load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }))
+            EngineHolder.get(app).load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }),
+                nativeTools = app.models.toolMode == "native", isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
         } catch (e: Exception) {
             status.value = "Load failed: ${e.message}"; return false
         }
         loadedSignature = sig
-        status.value = "${entry.name} · ${tools.size} tools"
+        status.value = "${entry.name} · ${EngineHolder.get(app).loadedBackend} · ${tools.size} tools (${app.models.toolMode})"
         return true
     }
 
@@ -70,7 +74,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 when (ev) {
                     is ChatEvent.Token -> { pending.append(ev.text); if (System.currentTimeMillis() - lastFlush > 80) flush() }
                     is ChatEvent.ToolCall -> { flush(); update(replyId) { it.copy(tools = it.tools + "→ ${ev.name} ${ev.args.take(160)}") } }
-                    is ChatEvent.ToolResult -> { update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
+                    is ChatEvent.ToolResult -> { pendingApproval.value = null; update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
+                    is ChatEvent.Confirm -> { flush(); pendingApproval.value = Triple(ev.id, ev.name, ev.args) }
                     is ChatEvent.Done -> { flush(); status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s" }
                 }
             }
@@ -78,6 +83,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             update(replyId) { it.copy(streaming = false) }
             busy.value = false
         }
+    }
+
+    fun approve(always: Boolean) {
+        val (id, tool, _) = pendingApproval.value ?: return
+        if (always) app.permissions.setAlwaysAllowed(tool, true)
+        Approvals.resolve(id, if (always) Approvals.Decision.ALLOW_ALWAYS else Approvals.Decision.ALLOW_ONCE)
+        pendingApproval.value = null
+    }
+
+    fun deny() {
+        val (id, _, _) = pendingApproval.value ?: return
+        Approvals.resolve(id, Approvals.Decision.DENY)
+        pendingApproval.value = null
     }
 
     fun clear() { messages.clear(); viewModelScope.launch { runCatching { EngineHolder.get(app).resetConversation() } } }

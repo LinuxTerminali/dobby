@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.OpenApiTool
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.tool
+import app.dobby.mcp.Effect
 import app.dobby.mcp.ToolSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -37,20 +38,33 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     private var config: ConversationConfig? = null
     override var loadedModel: ModelEntry? = null
         private set
+    override var loadedBackend: String? = null
+        private set
 
-    override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String) =
+    private var promptTools: List<ToolSpec> = emptyList()
+    private var promptExecutor: ToolExecutor? = null
+
+    private var alwaysAllowed: (String) -> Boolean = { false }
+
+    override suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean,
+                              isAlwaysAllowed: (String) -> Boolean) =
         withContext(Dispatchers.IO) {
+            alwaysAllowed = isAlwaysAllowed
             close()
             val wantGpu = entry.backend.equals("gpu", ignoreCase = true)
             engine = try {
-                open(modelPath, if (wantGpu) Backend.GPU() else Backend.CPU())
+                open(modelPath, if (wantGpu) Backend.GPU() else Backend.CPU()).also { loadedBackend = if (wantGpu) "GPU" else "CPU" }
             } catch (e: Exception) {
                 Log.w(TAG, "backend ${entry.backend} failed, falling back to CPU: ${e.message}")
-                if (wantGpu) open(modelPath, Backend.CPU()) else throw e
+                if (wantGpu) open(modelPath, Backend.CPU()).also { loadedBackend = "CPU (fallback)" } else throw e
             }
-            toolObjects = if (entry.supportsTools) tools.map { McpOpenApiTool(it, executor) } else emptyList()
+            val useNative = nativeTools && entry.supportsTools
+            toolObjects = if (useNative) tools.map { McpOpenApiTool(it, executor) } else emptyList()
+            promptTools = if (!useNative) tools else emptyList()
+            promptExecutor = executor
+            val instruction = if (useNative || tools.isEmpty()) systemPrompt else systemPrompt + "\n\n" + PromptTools.protocol()
             config = ConversationConfig(
-                systemInstruction = Contents.of(systemPrompt),
+                systemInstruction = Contents.of(instruction),
                 tools = toolObjects.map { tool(it) },
                 samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
                 // Thinking off for speed on a phone; flip on if tool planning suffers.
@@ -71,19 +85,73 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         val conv = conversation ?: run { close(); return@callbackFlow }
         val t0 = System.currentTimeMillis()
         toolObjects.forEach { it.sink = { ev -> trySend(ev) } }
-        try {
+
+        /** Streams one model turn. Holds back anything that looks like a tool call; returns raw text and how much was shown. */
+        suspend fun stream(text: String, holdToolLine: Boolean): Pair<String, Int> {
+            val buf = StringBuilder(); var shown = 0
             // Chunks are deltas. Text lives in contents as Content.Text parts; chunks that carry
             // only `channels` (thinking stream) have empty contents and are skipped.
-            conv.sendMessageAsync(userText).collect { msg ->
-                val t = msg.contents.contents
-                    .filterIsInstance<Content.Text>()
-                    .joinToString("") { it.text }
-                if (t.isNotEmpty()) trySend(ChatEvent.Token(t))
+            // `send` (not trySend) so a slow collector applies backpressure instead of dropping chunks.
+            conv.sendMessageAsync(text).collect { msg ->
+                val t = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
+                if (t.isEmpty()) return@collect
+                buf.append(t)
+                val visible = if (holdToolLine) PromptTools.visiblePrefix(buf.toString(), final = false) else buf.toString()
+                if (visible.length > shown) { send(ChatEvent.Token(visible.substring(shown))); shown = visible.length }
             }
-            trySend(ChatEvent.Done(System.currentTimeMillis() - t0))
+            return buf.toString() to shown
+        }
+
+        try {
+            if (promptTools.isEmpty()) {
+                try {
+                    stream(userText, holdToolLine = false)
+                } catch (e: Exception) {
+                    // Native tool path: the model emitted a call the runtime could not parse; one clean retry.
+                    if (e.message?.contains("parse tool call", ignoreCase = true) == true) {
+                        Log.w(TAG, "malformed tool call, retrying once: ${e.message}")
+                        send(ChatEvent.ToolResult("runtime", "malformed tool call; retrying"))
+                        stream("Your last tool call was malformed. Call the tool again with all string arguments in double quotes, or answer without a tool.", false)
+                    } else throw e
+                }
+            } else {
+                // Prompt-based tool loop, capped at MAX_STEPS calls.
+                val offered = ToolRouter.route(userText, promptTools)
+                send(ChatEvent.ToolResult("router", "offered ${offered.size}/${promptTools.size}: " + offered.joinToString(", ") { it.name }))
+                var next = PromptTools.turnMessage(userText, offered)
+                var steps = 0
+                var corrected = false
+                while (true) {
+                    val (raw, shown) = stream(next, holdToolLine = true)
+                    val call = PromptTools.parse(raw, promptTools)   // accept any known tool, not only the offered ones
+                    if (call == null) {
+                        if (PromptTools.looksLikeCall(raw) && !corrected) {
+                            // Looked like a tool call but did not parse: one correction, then give up gracefully.
+                            corrected = true
+                            send(ChatEvent.ToolResult("runtime", "unparsed tool call; asking for a retry: " + raw.take(120)))
+                            next = PromptTools.CORRECTION
+                            continue
+                        }
+                        // Plain answer (or unfixable): flush whatever the hold-back kept.
+                        if (raw.length > shown) send(ChatEvent.Token(raw.substring(shown)))
+                        break
+                    }
+                    if (steps >= PromptTools.MAX_STEPS) { send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]")); break }
+                    steps++
+                    send(ChatEvent.ToolCall(call.name, call.args.toString()))
+                    val effect = promptTools.firstOrNull { it.name == call.name }?.effect ?: Effect.READ
+                    val decision = Approvals.preDecide(effect, alwaysAllowed(call.name))
+                        ?: Approvals.request(call.name, call.args, emit = { id -> send(ChatEvent.Confirm(id, call.name, call.args.toString())) })
+                    val result = if (decision == Approvals.Decision.DENY) JSONObject().put("error", "The user did not approve this action. Do not retry it; tell the user it was not done.")
+                        else try { promptExecutor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }
+                    send(ChatEvent.ToolResult(call.name, result.toString().take(600)))
+                    next = PromptTools.resultMessage(call.name, result)
+                }
+            }
+            send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } catch (e: Exception) {
-            trySend(ChatEvent.Token("\n[error: ${e.message}]"))
-            trySend(ChatEvent.Done(System.currentTimeMillis() - t0))
+            send(ChatEvent.Token("\n[error: ${e.message}]"))
+            send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } finally {
             toolObjects.forEach { it.sink = null }
             close()
@@ -100,7 +168,7 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
     override suspend fun close() = withContext(Dispatchers.IO) {
         runCatching { conversation?.close() }
         runCatching { engine?.close() }
-        conversation = null; engine = null; loadedModel = null
+        conversation = null; engine = null; loadedModel = null; loadedBackend = null
     }
 
     companion object { private const val TAG = "LiteRtLmEngine" }

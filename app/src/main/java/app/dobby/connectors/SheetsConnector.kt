@@ -23,6 +23,8 @@ class SheetsConnector(private val context: Context, private val auth: GoogleAuth
         require(tool == "read") { "unknown tool $tool" }
         val range = URLEncoder.encode(args.optString("range", "A1:Z100"), "UTF-8")
         val res = JSONObject(auth.get("https://sheets.googleapis.com/v4/spreadsheets/${args.getString("spreadsheet_id")}/values/$range"))
-        return JSONObject().put("range", res.optString("range")).put("values", res.optJSONArray("values") ?: org.json.JSONArray())
+        val values = res.optJSONArray("values") ?: org.json.JSONArray()
+        val rows = (0 until minOf(values.length(), 20)).joinToString("; ") { i -> val r = values.getJSONArray(i); (0 until r.length()).joinToString(" | ") { r.get(it).toString() } }
+        return JSONObject().put("summary", "Range ${res.optString("range")}, ${values.length()} rows: $rows").put("range", res.optString("range")).put("values", values)
     }
 }
