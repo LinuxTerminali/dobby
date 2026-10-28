@@ -58,7 +58,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (i >= 0) messages[i] = f(messages[i])
     }
 
-    fun send(text: String) {
+    fun send(text: String) = send(text, retry = true)
+
+    private fun send(text: String, retry: Boolean) {
         if (text.isBlank() || busy.value) return
         messages += ChatMessage(nextId++, "user", text)
         val replyId = nextId++
@@ -77,16 +79,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             val prefix = pendingContext?.let { Compactor.contextPrefix(it) } ?: ""
             pendingContext = null
+            var runtimeError: String? = null
             EngineHolder.get(app).send(prefix + PromptBuilder.withContext(app, text)).collect { ev ->
                 when (ev) {
                     is ChatEvent.Token -> { pending.append(ev.text); if (System.currentTimeMillis() - lastFlush > 80) flush() }
                     is ChatEvent.ToolCall -> { flush(); update(replyId) { it.copy(tools = it.tools + "→ ${ev.name} ${ev.args.take(160)}") } }
                     is ChatEvent.ToolResult -> { pendingApproval.value = null; update(replyId) { it.copy(tools = it.tools + "← ${ev.name}: ${ev.result.take(160)}") } }
                     is ChatEvent.Confirm -> { flush(); pendingApproval.value = Triple(ev.id, ev.name, ev.args) }
+                    is ChatEvent.RuntimeError -> runtimeError = ev.message
                     is ChatEvent.Done -> { flush(); status.value = status.value.substringBefore(" · took") + " · took ${ev.millis / 1000.0}s" }
                 }
             }
             flush()
+            if (runtimeError != null) {
+                // The backend ran out of state for this conversation: compact what we have, reset, and retry the message once.
+                messages.removeAll { it.id == replyId }
+                messages.removeAll { it.id == replyId - 1 && it.role == "user" }
+                compactNow(force = true)
+                messages += ChatMessage(nextId++, "system", if (retry) "Conversation was too long for the model; summarised and retrying" else "Model error: ${runtimeError!!.take(120)}")
+                busy.value = false
+                if (retry) send(text, retry = false)
+                return@launch
+            }
             update(replyId) { it.copy(streaming = false) }
             turnsSinceCompaction++
             maybeCompact()
@@ -98,15 +112,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun maybeCompact() {
         val engine = EngineHolder.get(app)
         if (!Compactor.shouldCompact(engine.contextChars, turnsSinceCompaction)) return
+        compactNow(force = false)
+    }
+
+    private suspend fun compactNow(force: Boolean) {
+        val engine = EngineHolder.get(app)
         status.value = status.value.substringBefore(" · took") + " · compacting…"
         val turns = messages.filter { it.role == "user" || it.role == "model" }.map { Compactor.Turn(it.role, it.text) }
-        val (older, keep) = Compactor.split(turns)
-        if (older.isEmpty()) return
+        val (older, keep) = if (force) turns to emptyList() else Compactor.split(turns)
+        if (older.isEmpty()) { runCatching { engine.resetConversation() }; status.value = status.value.substringBefore(" · compacting"); return }
+        // After a runtime error the live conversation is unusable; reset first so the one-shot runs on a clean engine.
+        if (force) runCatching { engine.resetConversation() }
         val out = runCatching { engine.oneShot(Compactor.prompt(older, lastSummary)) }.getOrDefault("")
         val r = Compactor.parse(out)
         r.facts.forEach { (text, tags) -> app.memory.remember(text, tags, "compaction") }
         lastSummary = r.summary
-        pendingContext = r.summary + if (keep.isNotEmpty()) "\nMost recent exchange: " + keep.joinToString(" / ") { "${it.role}: ${it.text.take(200)}" } else ""
+        pendingContext = if (r.summary.isBlank()) null
+            else r.summary + if (keep.isNotEmpty()) "\nMost recent exchange: " + keep.joinToString(" / ") { "${it.role}: ${it.text.take(200)}" } else ""
         runCatching { engine.resetConversation() }
         turnsSinceCompaction = 0
         compactions.value++

@@ -56,10 +56,15 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
   Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
 
 ## Compaction
-After ~6K tokens of conversation (and at least 6 turns), older turns are summarised by a tool-less one-shot
+After ~2.5K tokens of conversation (and at least 4 turns), older turns are summarised by a tool-less one-shot
 call into a ≤120-word note; lasting facts the user stated are saved to memory (source `compaction`); the
 conversation restarts with the note and the last two exchanges as context. The chat shows a small
 "Earlier turns summarised" line. `Compactor` is pure Kotlin with tests.
+
+## Runtime errors
+LiteRT-LM on the Pixel 9 GPU degrades as a conversation grows (dropped digits, then `Status Code: 9 …
+state entries` / `Status Code: 13`). The engine reports these as `RuntimeError`; the chat compacts, resets and
+retries the message once, with a visible note. Tool data fed to the model is capped at 1.5K chars.
 
 ## Permissions
 Tools declare an effect: READ, WRITE, DESTRUCTIVE. Destructive calls (`memory.forget`, `reminders.delete`,

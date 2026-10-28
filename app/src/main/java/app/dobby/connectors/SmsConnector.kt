@@ -22,7 +22,7 @@ class SmsConnector(private val context: Context) : Connector {
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
 
     override fun tools() = listOf(
-        ToolSpec("search", "Search SMS by sender or keyword, e.g. 'BESCOM', 'Swiggy', 'debited'. Use this whenever a sender or topic is named.",
+        ToolSpec("search", "Search SMS by sender or keyword, e.g. 'BESCOM', 'Swiggy', 'debited'. Bank balance: search 'Avl Bal' or 'balance'. Use this whenever a sender or topic is named.",
             ToolSpec.schema(listOf(
                 Triple("query", "string", "Text to match, e.g. 'BESCOM' or 'debited'"),
                 Triple("days", "integer", "Look back this many days. Default 30"),

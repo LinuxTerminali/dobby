@@ -115,7 +115,7 @@ private fun MessageRow(m: ChatMessage) {
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    if (m.tools.isNotEmpty()) ToolTrace(m.tools)
+                    if (m.tools.any { it.startsWith("→") || it.contains(": malformed") || it.contains("unparsed") }) ToolTrace(m.tools)
                     if (m.text.isEmpty() && m.streaming) {
                         CircularProgressIndicator(Modifier.size(18.dp).padding(top = 4.dp), strokeWidth = 2.dp)
                     } else {

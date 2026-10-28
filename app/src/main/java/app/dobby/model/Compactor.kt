@@ -9,9 +9,9 @@ import org.json.JSONObject
  * Pure Kotlin; the engine call happens in the view model.
  */
 object Compactor {
-    /** ~6K tokens of transcript. Keeps prefill and KV memory bounded on a phone. */
-    const val BUDGET_CHARS = 24_000
-    const val MIN_TURNS = 6
+    /** ~2.5K tokens of transcript. The GPU backend degraded (dropped digits, then prefill errors) well before 6K. */
+    const val BUDGET_CHARS = 10_000
+    const val MIN_TURNS = 4
     const val KEEP_RECENT = 2   // last user/assistant pairs are replayed verbatim after compaction
 
     data class Turn(val role: String, val text: String)

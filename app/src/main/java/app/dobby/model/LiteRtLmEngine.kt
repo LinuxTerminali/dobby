@@ -154,7 +154,8 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
             }
             send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } catch (e: Exception) {
-            send(ChatEvent.Token("\n[error: ${e.message}]"))
+            val m = e.message ?: e.toString()
+            if (isRuntimeStateError(m)) send(ChatEvent.RuntimeError(m)) else send(ChatEvent.Token("\n[error: $m]"))
             send(ChatEvent.Done(System.currentTimeMillis() - t0))
         } finally {
             toolObjects.forEach { it.sink = null }
@@ -190,7 +191,11 @@ class LiteRtLmEngine(private val context: Context) : LlmEngine {
         conversation = null; engine = null; loadedModel = null; loadedBackend = null
     }
 
-    companion object { private const val TAG = "LiteRtLmEngine" }
+    companion object {
+        private const val TAG = "LiteRtLmEngine"
+        /** Errors seen when the conversation outgrows the backend: Status 9 (prefill work group / state entries), 13 (task failed). */
+        fun isRuntimeStateError(m: String) = m.contains("state entries") || m.contains("Status Code: 9") || m.contains("Status Code: 13") || m.contains("Task failed")
+    }
 }
 
 /** Bridges one MCP ToolSpec to LiteRT-LM's OpenApiTool. */

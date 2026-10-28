@@ -15,6 +15,8 @@ sealed class ChatEvent {
     /** The model wants to run a destructive tool; the UI must call Approvals.resolve(id, …). */
     data class Confirm(val id: String, val name: String, val args: String) : ChatEvent()
     data class Done(val millis: Long) : ChatEvent()
+    /** The runtime failed on this turn (e.g. GPU prefill state exhausted); the conversation must be reset. */
+    data class RuntimeError(val message: String) : ChatEvent()
 }
 
 /**

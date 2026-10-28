@@ -25,9 +25,10 @@ class PlacesConnector(private val context: Context) : Connector {
 
     override fun tools() = listOf(
         ToolSpec("list", "List saved places and their rules.", ToolSpec.schema(emptyList())),
-        ToolSpec("set", "Save or update a place. Omit lat/lng to use the phone's current location.",
-            ToolSpec.schema(listOf(Triple("label", "string", "e.g. home, office"), Triple("lat", "number", "Latitude"), Triple("lng", "number", "Longitude"),
-                Triple("radius_m", "number", "Radius in metres. Default 150")), listOf("label"))),
+        ToolSpec("set", "Save or update a place. Give address to look it up (e.g. 'MoEngage, Bangalore'), or lat/lng, or neither to use the phone's current location.",
+            ToolSpec.schema(listOf(Triple("label", "string", "e.g. home, office"), Triple("address", "string", "Place name or address to geocode"),
+                Triple("lat", "number", "Latitude"), Triple("lng", "number", "Longitude"),
+                Triple("radius_m", "number", "Radius in metres. Default 150")), listOf("label")), Effect.WRITE),
         ToolSpec("add_rule", "Do something when the user enters or leaves a saved place. Give message for a plain notification, or prompt if Dobby must check something with tools.",
             ToolSpec.schema(listOf(Triple("label", "string", "Place label"), Triple("event", "string", "enter or exit"),
                 Triple("days", "array", "Days 1=Sun..7=Sat; empty = any"), Triple("from_hour", "integer", "0-23, default 0"), Triple("to_hour", "integer", "1-24, default 24"),
@@ -41,8 +42,12 @@ class PlacesConnector(private val context: Context) : Connector {
             .put("places", JSONArray(all.map { it.toJson().put("rules_text", JSONArray(it.rules.map { r -> r.describe() })) })) }
         "set" -> {
             val label = args.getString("label")
-            val (lat, lng) = if (args.has("lat") && args.has("lng")) args.getDouble("lat") to args.getDouble("lng")
-                else geo.currentLocation() ?: throw IllegalStateException("no current location; give lat/lng")
+            val address = args.optString("address", "").trim()
+            val (lat, lng) = when {
+                args.has("lat") && args.has("lng") -> args.getDouble("lat") to args.getDouble("lng")
+                address.isNotEmpty() -> geocode(address) ?: throw IllegalStateException("could not find '$address'; try a fuller address or save it when you are there")
+                else -> geo.currentLocation() ?: throw IllegalStateException("no current location; give an address or lat/lng")
+            }
             val existing = store.byLabel(label)
             val p = Place(existing?.id ?: UUID.randomUUID().toString().take(8), label, lat, lng, args.optDouble("radius_m", 150.0).toFloat(), existing?.rules ?: emptyList())
             store.upsert(p); geo.registerAll()
@@ -64,6 +69,15 @@ class PlacesConnector(private val context: Context) : Connector {
         }
         "delete" -> { val p = store.byLabel(args.getString("label")); if (p != null) { store.delete(p.id); geo.registerAll() }; JSONObject().put("deleted", p != null) }
         else -> throw IllegalArgumentException("unknown tool $tool")
+    }
+
+    /** Android Geocoder (Play services backed): name or address → lat/lng. Needs network. */
+    private suspend fun geocode(q: String): Pair<Double, Double>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (!android.location.Geocoder.isPresent()) return@withContext null
+        val g = android.location.Geocoder(context, java.util.Locale.getDefault())
+        @Suppress("DEPRECATION")
+        val r = runCatching { g.getFromLocationName(q, 1) }.getOrNull()?.firstOrNull() ?: return@withContext null
+        r.latitude to r.longitude
     }
 
     private fun noPlace(label: String): String {

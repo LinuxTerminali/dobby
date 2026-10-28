@@ -15,6 +15,8 @@ import org.json.JSONObject
  */
 object PromptTools {
     const val MAX_STEPS = 5
+    /** Tool data fed back to the model. Long results grow the context fast on a phone. */
+    const val DATA_CAP = 1500
     private val JSON_LINE = Regex("(?m)^\\s*(?:```(?:json)?\\s*)?TOOL\\s*(\\{.*\\})\\s*(?:```)?\\s*$", RegexOption.DOT_MATCHES_ALL)
     private val FUNC = Regex("(?:<\\|tool_call>\\s*call:\\s*)?([a-z_]+\\.[a-z_]+)\\s*\\((.*?)\\)\\s*(?:<tool_call\\|>)?", RegexOption.DOT_MATCHES_ALL)
     private val HOLD = Regex("(?m)^\\s*(?:```(?:json)?\\s*)?(?:TOOL\\b|<\\|tool_call>|[a-z_]+\\.[a-z_]+\\s*\\()")
@@ -135,9 +137,9 @@ object PromptTools {
     /** Summary line first (the model copies it), then the data for details. */
     fun resultMessage(name: String, result: JSONObject): String {
         val summary = result.optString("summary", "")
-        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(4000)
+        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(DATA_CAP)
         val data = JSONObject(result.toString()).apply { remove("summary") }.toString()
-        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(3000)
+        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(DATA_CAP)
     }
 
     const val CORRECTION = "That was not a valid tool call. Reply with exactly one line: TOOL {\"name\":\"<tool>\",\"args\":{...}} using a tool from the list, or answer the user directly."
