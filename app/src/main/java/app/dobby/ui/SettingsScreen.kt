@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.dobby.App
+import app.dobby.util.CrashLog
 import app.dobby.BuildConfig
 import app.dobby.update.UpdateChecker
 import kotlinx.coroutines.delay
@@ -69,6 +70,14 @@ fun SettingsScreen() {
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = { app.connectors.googleAuth().signOut() }) { Text("Sign out of Google") }
         Spacer(Modifier.height(24.dp))
+        SectionTitle("Last crash")
+        var crash by remember { mutableStateOf(CrashLog.last(ctx)) }
+        if (crash == null) Hint("No crash recorded. If the app crashes, the trace appears here and in Download/Dobby/crash.txt.")
+        else {
+            Text(crash!!.take(2500), style = MaterialTheme.typography.labelSmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            TextButton(onClick = { CrashLog.clear(ctx); crash = null }) { Text("Clear") }
+        }
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Notes")
         Text("• Sideloaded app: before granting SMS or call-log permission, open App info → ⋮ → Allow restricted settings.\n" +
              "• Everything runs on the phone. Only the Google connectors and the browser tool use the network.\n" +

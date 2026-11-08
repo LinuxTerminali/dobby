@@ -17,6 +17,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        app.dobby.util.CrashLog.install(this)
         memory = MemoryStore(this)
         permissions = app.dobby.model.PermissionStore(this)
         connectors = ConnectorRegistry(this, memory)
