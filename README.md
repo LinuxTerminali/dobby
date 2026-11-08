@@ -57,6 +57,8 @@ backend and is unit-tested with a scripted fake. Backends:
 - `RemoteBackend`: any OpenAI-compatible server (`POST {base}/chat/completions`, SSE streaming) — vLLM,
   llama.cpp server, Ollama, LM Studio or a hosted API. Models → Add endpoint (base URL ending in `/v1`,
   model id, optional key). Conversations to a remote server leave the phone; keep it on your own network.
+  Plain `http://` endpoints are allowed (`usesCleartextTraffic`), intended for Tailscale/LAN servers; use
+  `https://` for anything beyond that (Tailscale can issue a certificate with `tailscale cert`).
 
 ## Money
 `money.bills_due`, `money.bill_anomalies` (>1.3× the median of the last 6 bills and >₹200), `money.balances`,
