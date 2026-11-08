@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.dobby.App
+import app.dobby.util.CrashLog
 import app.dobby.BuildConfig
 import app.dobby.update.UpdateChecker
 import kotlinx.coroutines.delay
@@ -47,15 +48,6 @@ fun SettingsScreen() {
         }
         Text("If Play Protect blocks the install, use adb install -r from a computer.", style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(16.dp))
-        SectionTitle("Tool calling")
-        var mode by remember { mutableStateOf(app.models.toolMode) }
-        Row {
-            listOf("prompt" to "Prompt (app parses TOOL lines)", "native" to "Native (runtime)").forEach { (v, label) ->
-                FilterChip(selected = mode == v, onClick = { mode = v; app.models.toolMode = v }, label = { Text(label) }, modifier = Modifier.padding(end = 8.dp))
-            }
-        }
-        Hint("Prompt mode avoids the runtime's tool path, which corrupted digits in testing. Switch to Native only to compare.")
-        Spacer(Modifier.height(16.dp))
         SectionTitle("Permissions")
         var allowed by remember { mutableStateOf(app.permissions.allAllowed()) }
         if (allowed.isEmpty()) Hint("Deleting tools (memory.forget, reminders.delete, places.delete) ask before running. Tools you set to \"Always allow\" appear here.")
@@ -66,6 +58,10 @@ fun SettingsScreen() {
             }
         }
         Spacer(Modifier.height(16.dp))
+        SectionTitle("Web search")
+        var brave by remember { mutableStateOf(app.connectors.web().braveKey) }
+        OutlinedTextField(brave, { brave = it; app.connectors.web().braveKey = it }, label = { Text("Brave Search API key (optional; DuckDuckGo is used without it)") }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Accounts")
         OutlinedTextField(hf, { hf = it; app.models.hfToken = it }, label = { Text("Hugging Face token (for gated Gemma models)") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
@@ -74,6 +70,14 @@ fun SettingsScreen() {
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = { app.connectors.googleAuth().signOut() }) { Text("Sign out of Google") }
         Spacer(Modifier.height(24.dp))
+        SectionTitle("Last crash")
+        var crash by remember { mutableStateOf(CrashLog.last(ctx)) }
+        if (crash == null) Hint("No crash recorded. If the app crashes, the trace appears here and in Download/Dobby/crash.txt.")
+        else {
+            Text(crash!!.take(2500), style = MaterialTheme.typography.labelSmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            TextButton(onClick = { CrashLog.clear(ctx); crash = null }) { Text("Clear") }
+        }
+        Spacer(Modifier.height(16.dp))
         SectionTitle("Notes")
         Text("• Sideloaded app: before granting SMS or call-log permission, open App info → ⋮ → Allow restricted settings.\n" +
              "• Everything runs on the phone. Only the Google connectors and the browser tool use the network.\n" +

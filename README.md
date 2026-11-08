@@ -6,9 +6,9 @@ Everything runs on the phone: a local LLM (LiteRT-LM), connectors exposed as MCP
 and a chat screen. Pluggable: a connector is one Kotlin class; a model is one registry row.
 
 ## Status
-First cut, **not yet compiled**: this tree was written without an Android SDK at hand.
-Expect a round of compile fixes on the first CI run, most likely in `LiteRtLmEngine.kt`
-(LiteRT-LM API surface) and Compose imports. Everything else is plain Android/Kotlin.
+Builds on CI; runs on a Pixel 9 with Gemma 4 E4B. The pure Kotlin parts (harness loop, router,
+validator, compaction, parsers, metrics) are unit-tested; Android-side code is reviewed and exercised on
+the device through the eval and real use.
 
 ## Build and updates
 - Models: grant "All files access" (Models tab banner) and they live in `Download/Dobby/models`,
@@ -37,7 +37,8 @@ Expect a round of compile fixes on the first CI run, most likely in `LiteRtLmEng
 mcp/         ToolSpec, McpServer, McpRouter   — MCP shapes (tools/list, tools/call), in-process
 connectors/  Connector + registry; CallLog, Sms, Gmail, Docs, Sheets, Browser, Device
 model/       ModelRegistry (assets/models.json + custom), ModelDownloader (DownloadManager),
-             LlmEngine (interface), LiteRtLmEngine (runtime), EngineHolder (one engine at a time)
+             LlmEngine, AgentEngine (harness), ChatBackend, LiteRtLmBackend, RemoteBackend, EngineHolder
+finance/     SmsTemplates (bank SMS → records), Ledger (SQLite), MoneyMath (anomaly/due rules)
 chat/        ChatViewModel, ChatScreen
 ui/          Connectors, Models, Settings screens
 eval/        EvalRunner — runs assets/golden.json through the selected model
@@ -47,13 +48,62 @@ reminders/   AlarmManager reminders (exact, Doze-safe), boot reschedule, Assista
              that wakes the model for reminders that carry a prompt
 ```
 
-## Tool calling modes
-- `prompt` (default): the model gets a compact tool catalog in the system prompt and replies with one
-  `TOOL {"name":…,"args":{…}}` line; the app parses it, runs the connector, feeds `TOOL_RESULT` back,
-  loops up to 5 times. The runtime sees a plain conversation.
-- `native`: LiteRT-LM's own tool path. On a Pixel 9 with Gemma 4 E4B this corrupted digits and ids
-  in replies and tool arguments (deterministic, both backends); kept only for comparison.
-  Settings → Tool calling, or `TOOLS=native scripts/eval.sh`.
+## Engines
+`ChatBackend` is the only runtime-specific surface (open / stream / oneShot / reset / close). `AgentEngine`
+holds the whole harness (tool loop, router, validator, approvals, retries, context accounting) over any
+backend and is unit-tested with a scripted fake. Backends:
+- `LiteRtLmBackend`: on-device `.litertlm` files; plain chat only (the runtime's native tool path corrupted
+  output on the Pixel 9 and is not used).
+- `RemoteBackend`: any OpenAI-compatible server (`POST {base}/chat/completions`, SSE streaming) — vLLM,
+  llama.cpp server, Ollama, LM Studio or a hosted API. Models → Add endpoint (base URL ending in `/v1`,
+  model id, optional key). Conversations to a remote server leave the phone; keep it on your own network.
+  Plain `http://` endpoints are allowed (`usesCleartextTraffic`), intended for Tailscale/LAN servers; use
+  `https://` for anything beyond that (Tailscale can issue a certificate with `tailscale cert`).
+
+## Money
+`money.bills_due`, `money.bill_anomalies` (>1.3× the median of the last 6 bills and >₹200), `money.balances`,
+`money.spend`, `money.rescan`. Bank and biller SMS are parsed by regex (`finance/SmsTemplates`, tested on
+HDFC/SBI/BESCOM/Airtel-style wording; extend per bank) into a local SQLite ledger; the model never parses
+money text. A daily check: "every day at 8 check bills due this week and unusual bills" → a reminder with a prompt.
+
+## Capacity
+Limits scale with the model (`model/Capacity`): on-device = small (1.5K tool data, 5 steps, compaction at
+10K, 3 research pages); remote = large (8K, 10 steps, 60K, 5 pages, longer passages, more search results).
+
+## Web tools
+`web.search` (DuckDuckGo HTML, or Brave Search with a key in Settings), `web.fetch` (readable main text,
+JS pages rendered in a hidden WebView), `web.extract(url, query)` (the passages that match a question,
+for long pages and tables), `web.research(question)` (search → read top pages → relevant passages with
+numbered sources, in one call). Pages are cached per session. `TextExtract` and `SearchParse` are pure
+Kotlin with tests.
+
+## Scheduled checks
+`reminders.create` with `every_minutes` (min 15) and a `prompt` runs that prompt with tools on schedule;
+the job notifies only when the answer is not "NOTHING"/"no change". The protocol tells the model it can
+do this, so "check this page every 15 minutes" becomes a tool call.
+
+## Validator
+Code checks the model's output every turn (`model/Validator`, pure Kotlin, tested):
+- A numeric tool argument that looks like a mangled copy of a number the user typed (365 → 35) blocks the
+  call; the model is told the user's value and asked again.
+- Numbers and clock times in a reply must appear in the user's message, the tool results, or today's date;
+  malformed times (23:000) always fail. String args that look like a word the user typed with characters
+  dropped (moengage → engage) block the call; otherwise the
+  reply is regenerated once with the offending numbers named, and if still unverifiable it is shown with
+  "⚠ Could not verify: …".
+- An empty tool result tells the model to try another listed tool before giving up.
+- After two GPU runtime errors in a session the model is switched to CPU with a note.
+
+## Compaction
+After ~2.5K tokens of conversation (and at least 4 turns), older turns are summarised by a tool-less one-shot
+call into a ≤120-word note; lasting facts the user stated are saved to memory (source `compaction`); the
+conversation restarts with the note and the last two exchanges as context. The chat shows a small
+"Earlier turns summarised" line. `Compactor` is pure Kotlin with tests.
+
+## Runtime errors
+LiteRT-LM on the Pixel 9 GPU degrades as a conversation grows (dropped digits, then `Status Code: 9 …
+state entries` / `Status Code: 13`). The engine reports these as `RuntimeError`; the chat compacts, resets and
+retries the message once, with a visible note. Tool data fed to the model is capped at 1.5K chars.
 
 ## Permissions
 Tools declare an effect: READ, WRITE, DESTRUCTIVE. Destructive calls (`memory.forget`, `reminders.delete`,

@@ -57,7 +57,8 @@ fun RemindersScreen() {
     val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     val exactOk = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()
 
-    key(tick) {
+    val all = remember(tick) { store.all() }
+    run {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -66,9 +67,8 @@ fun RemindersScreen() {
                 }
                 if (!exactOk) FilledTonalButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) }) { Text("Allow exact alarms") }
             }
-            val all = store.all()
             if (all.isEmpty()) item { Hint("No reminders. Tell Dobby in chat, e.g. “remind me every weekday at 8 to check bills”.") }
-            items(all) { r ->
+            items(all, key = { it.id }) { r ->
                 DobbyCard {
                     TitleRow(r.title, r.describe() + (r.nextTrigger()?.let { " · next " + NEXT_FMT.format(Date(it)) } ?: "")) {
                         Switch(checked = r.enabled, onCheckedChange = { on -> val u = r.copy(enabled = on); store.upsert(u); scheduler.schedule(u); tick++ })

@@ -52,7 +52,8 @@ fun PlacesScreen() {
     var msg by remember { mutableStateOf<String?>(null) }
     var ruleFor by remember { mutableStateOf<Place?>(null) }
 
-    key(tick) {
+    val all = remember(tick) { store.all() }
+    run {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
                 Hint("Geofences wake Dobby on enter or exit. Nothing is tracked in between.")
@@ -72,9 +73,8 @@ fun PlacesScreen() {
                 msg?.let { Hint(it, error = true) }
                 Spacer(Modifier.height(8.dp))
             }
-            val all = store.all()
             if (all.isEmpty()) item { Hint("No places yet. Stand where you want and tap “Add here”, or tell Dobby “save this place as office”.") }
-            items(all) { p ->
+            items(all, key = { it.id }) { p ->
                 DobbyCard {
                     TitleRow(p.label, "%.5f, %.5f · %.0f m".format(p.lat, p.lng, p.radiusM)) {
                         IconButton(onClick = { store.delete(p.id); geo.registerAll(); tick++ }) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }

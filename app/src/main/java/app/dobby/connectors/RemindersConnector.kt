@@ -27,7 +27,7 @@ class RemindersConnector(private val context: Context) : Connector {
     private val scheduler = ReminderScheduler(context)
 
     override fun tools() = listOf(
-        ToolSpec("create", "Create a reminder. Give title plus the fields for ONE kind only: (a) place-based, 'when I reach/leave X' → place, event=enter|exit; (b) recurring → days (1=Sun..7=Sat; weekdays=[2,3,4,5,6]), hour, minute; (c) one-off → in_minutes ('in 2 hours' → 120) or at ('HH:MM' or 'YYYY-MM-DD HH:MM').",
+        ToolSpec("create", "Create a reminder or a scheduled check. Give title plus the fields for ONE kind: (a) place-based: place, event=enter|exit; (b) daily/weekly: days (names or 'weekdays'), hour, minute; (c) one-off: in_minutes or at ('HH:MM'); (d) repeating interval: every_minutes (min 15). Add prompt to make Dobby check something with tools each time (e.g. 'Use web.extract on <url> for delay; reply NOTHING if no delay'); it notifies only when the answer is not NOTHING.",
             ToolSpec.schema(listOf(
                 Triple("title", "string", "Short title"),
                 Triple("message", "string", "Body text. Optional"),
@@ -35,6 +35,7 @@ class RemindersConnector(private val context: Context) : Connector {
                 Triple("minute", "integer", "0-59, for recurring"),
                 Triple("days", "array", "Day names: [\"mon\",\"tue\",...], or \"weekdays\"/\"weekends\"/\"daily\". Empty for one-off"),
                 Triple("in_minutes", "integer", "One-off: minutes from now"),
+                Triple("every_minutes", "integer", "Repeat every N minutes (minimum 15). For scheduled checks."),
                 Triple("at", "string", "One-off: local time 'YYYY-MM-DD HH:MM' or 'HH:MM'"),
                 Triple("place", "string", "Saved place label for a place-based reminder, e.g. office"),
                 Triple("event", "string", "enter or exit, for a place-based reminder"),
@@ -46,14 +47,15 @@ class RemindersConnector(private val context: Context) : Connector {
     override suspend fun call(tool: String, args: JSONObject): JSONObject = when (tool) {
         "create" -> if (args.optString("place").isNotBlank()) createPlaceReminder(args) else {
             val days = app.dobby.util.Days.parse(args.opt("days"))
+            val every = args.optInt("every_minutes", 0).let { if (it in 1..14) 15 else it }
             val at = resolveAt(args)
-            require(days.isNotEmpty() || at > System.currentTimeMillis()) { "give days+hour+minute for recurring; in_minutes or at for one-off; place+event for place-based" }
+            require(days.isNotEmpty() || every > 0 || at > System.currentTimeMillis()) { "give days+hour+minute, every_minutes, in_minutes/at, or place+event" }
             val cal = java.util.Calendar.getInstance().apply { if (at > 0) timeInMillis = at }
             val r = Reminder(
                 id = UUID.randomUUID().toString().take(8), title = titleOf(args), message = args.optString("message"),
                 hour = if (days.isNotEmpty()) args.optInt("hour", 9) else cal.get(java.util.Calendar.HOUR_OF_DAY),
                 minute = if (days.isNotEmpty()) args.optInt("minute", 0) else cal.get(java.util.Calendar.MINUTE),
-                days = days, atMillis = at, prompt = args.optString("prompt"))
+                days = days, atMillis = if (every > 0) System.currentTimeMillis() else at, prompt = args.optString("prompt"), everyMinutes = every)
             store.upsert(r); scheduler.schedule(r)
             val next = r.nextTrigger()
             JSONObject().put("summary", "Reminder \"${r.title}\" set: ${r.describe()}" + (next?.let { ", next on ${Fmt.dateTime(it)}." } ?: "."))

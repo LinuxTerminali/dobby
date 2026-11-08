@@ -47,12 +47,17 @@ fun ModelsScreen() {
     val scope = rememberCoroutineScope()
     var tick by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
+    var showRemote by remember { mutableStateOf(false) }
     var evalOut by remember { mutableStateOf<String?>(null) }
     var evalBusy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { while (true) { delay(1000); tick++ } }
+    val models = remember(tick) { app.models.all() }
+    // Poll progress only while a download is running; never rebuild the list.
+    LaunchedEffect(models) {
+        while (models.any { m -> app.downloader.progress(m)?.running == true }) { delay(1000); tick++ }
+    }
 
-    key(tick) {
+    run {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
                 if (!app.models.sharedAllowed()) {
@@ -69,12 +74,13 @@ fun ModelsScreen() {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Hint("One model is loaded at a time. Gated Gemma files need a Hugging Face token (Settings).", Modifier.weight(1f))
-                    TextButton(onClick = { showAdd = true }) { Text("Add by URL") }
+                    TextButton(onClick = { showAdd = true }) { Text("Add file") }
+                    TextButton(onClick = { showRemote = true }) { Text("Add endpoint") }
                 }
                 evalOut?.let { Hint(it) }
             }
-            items(app.models.all()) { m ->
-                ModelCard(m, onChanged = { tick++ }, evalBusy = evalBusy, onEval = {
+            items(models, key = { it.id }) { m ->
+                ModelCard(m, tick, onChanged = { tick++ }, evalBusy = evalBusy, onEval = {
                     evalBusy = true; evalOut = "Running eval…"
                     scope.launch {
                         evalOut = runCatching { EvalRunner(app).run(m) { p -> evalOut = "Eval $p" } }
@@ -88,11 +94,13 @@ fun ModelsScreen() {
         }
     }
     if (showAdd) AddModelDialog(onDismiss = { showAdd = false }, onAdd = { app.models.addCustom(it); showAdd = false; tick++ })
+    if (showRemote) AddEndpointDialog(onDismiss = { showRemote = false }) { name, url, model, key -> app.models.addRemote(name, url, model, key); showRemote = false; tick++ }
 }
 
 @Composable
-private fun ModelCard(m: ModelEntry, onChanged: () -> Unit, evalBusy: Boolean, onEval: () -> Unit) {
+private fun ModelCard(m: ModelEntry, tick: Int, onChanged: () -> Unit, evalBusy: Boolean, onEval: () -> Unit) {
     val app = LocalContext.current.applicationContext as App
+    @Suppress("UNUSED_VARIABLE") val refresh = tick   // recompose this card when the parent ticks
     val downloaded = app.models.isDownloaded(m)
     val prog = app.downloader.progress(m)
     val selected = app.models.selectedId == m.id
@@ -100,7 +108,8 @@ private fun ModelCard(m: ModelEntry, onChanged: () -> Unit, evalBusy: Boolean, o
 
     DobbyCard(highlighted = selected) {
         TitleRow(m.name + (if (m.custom) " · custom" else ""),
-            "${if (m.sizeGb > 0) "${m.sizeGb} GB · " else ""}${m.backend.uppercase()} · ${if (m.supportsTools) "tools" else "no tools"} · ${if (m.supportsVision) "vision" else "text"} · ${m.license}") {
+            if (m.isRemote) "${m.endpoint} · ${m.modelName} · OpenAI-compatible"
+            else "${if (m.sizeGb > 0) "${m.sizeGb} GB · " else ""}${m.backend.uppercase()} · ${if (m.supportsTools) "tools" else "no tools"} · ${if (m.supportsVision) "vision" else "text"} · ${m.license}") {
             if (selected) StatusPill("Active", ok = true)
             else if (downloaded) StatusPill("Downloaded")
             else if (running) StatusPill("${prog!!.status} ${prog.percent}%")
@@ -111,7 +120,7 @@ private fun ModelCard(m: ModelEntry, onChanged: () -> Unit, evalBusy: Boolean, o
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(progress = { prog!!.percent / 100f }, modifier = Modifier.fillMaxWidth())
         }
-        if (downloaded) {
+        if (downloaded && !m.isRemote) {
             Spacer(Modifier.height(8.dp))
             val current = app.models.withBackend(m).backend.lowercase()
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -131,13 +140,34 @@ private fun ModelCard(m: ModelEntry, onChanged: () -> Unit, evalBusy: Boolean, o
                 else -> {
                     if (!selected) FilledTonalButton(onClick = { app.models.selectedId = m.id; onChanged() }) { Text("Use") }
                     TextButton(enabled = !evalBusy, onClick = onEval) { Text("Run eval") }
-                    TextButton(onClick = { app.downloader.delete(m); if (selected) app.models.selectedId = null; onChanged() }) { Text("Delete") }
+                    if (!m.isRemote) TextButton(onClick = { app.downloader.delete(m); if (selected) app.models.selectedId = null; onChanged() }) { Text("Delete") }
                 }
             }
             Spacer(Modifier.width(4.dp))
             if (m.custom) TextButton(onClick = { app.models.removeCustom(m.id); onChanged() }) { Text("Remove") }
         }
     }
+}
+
+@Composable
+private fun AddEndpointDialog(onDismiss: () -> Unit, onAdd: (String, String, String, String) -> Unit) {
+    var name by remember { mutableStateOf("My server") }
+    var url by remember { mutableStateOf("http://100.64.0.1:8000/v1") }
+    var model by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text("Add an OpenAI-compatible endpoint") },
+        text = {
+            Column {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") })
+                OutlinedTextField(url, { url = it }, label = { Text("Base URL (…/v1)") })
+                OutlinedTextField(model, { model = it }, label = { Text("Model id (as the server names it)") })
+                OutlinedTextField(key, { key = it }, label = { Text("API key (optional)") })
+                Hint("Works with vLLM, llama.cpp server, Ollama, LM Studio or a hosted API. Chats to a remote server leave the phone; keep it on your own network (e.g. Tailscale).")
+            }
+        },
+        confirmButton = { TextButton(enabled = name.isNotBlank() && url.startsWith("http") && model.isNotBlank(), onClick = { onAdd(name, url, model, key) }) { Text("Add") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable

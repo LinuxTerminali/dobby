@@ -60,8 +60,11 @@ private val SUGGESTIONS = listOf(
 fun ChatScreen(vm: ChatViewModel) {
     var input by remember { mutableStateOf("") }
     val list = rememberLazyListState()
-    LaunchedEffect(vm.messages.size, vm.messages.lastOrNull()?.text?.length) {
-        if (vm.messages.isNotEmpty()) list.animateScrollToItem(vm.messages.lastIndex)
+    // New message: jump to it. Streaming text: follow only if the user is already at the bottom.
+    LaunchedEffect(vm.messages.size) { if (vm.messages.isNotEmpty()) list.scrollToItem(vm.messages.lastIndex) }
+    val lastLen = vm.messages.lastOrNull()?.text?.length ?: 0
+    LaunchedEffect(lastLen) {
+        if (vm.messages.isNotEmpty() && !list.canScrollForward) list.scrollToItem(vm.messages.lastIndex)
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -95,6 +98,11 @@ private fun EmptyState(modifier: Modifier, onPick: (String) -> Unit) {
 
 @Composable
 private fun MessageRow(m: ChatMessage) {
+    if (m.role == "system") {
+        Text(m.text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        return
+    }
     val user = m.role == "user"
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (user) Arrangement.End else Arrangement.Start) {
         if (user) {
@@ -110,7 +118,7 @@ private fun MessageRow(m: ChatMessage) {
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    if (m.tools.isNotEmpty()) ToolTrace(m.tools)
+                    if (m.tools.any { it.startsWith("→") || it.contains(": malformed") || it.contains("unparsed") }) ToolTrace(m.tools)
                     if (m.text.isEmpty() && m.streaming) {
                         CircularProgressIndicator(Modifier.size(18.dp).padding(top = 4.dp), strokeWidth = 2.dp)
                     } else {

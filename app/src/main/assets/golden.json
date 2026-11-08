@@ -546,7 +546,6 @@
    "id": "mem-recall-01",
    "group": "memory",
    "prompt": "What do you know about my office?",
-   "expect_tool": "memory.recall",
    "expect_args": {
     "query": "~office"
    },
@@ -560,9 +559,16 @@
        "source": "user"
       }
      ]
+    },
+    "places.list": {
+     "summary": "No saved places.",
+     "places": []
     }
    },
-   "reply_contains": "north gate"
+   "reply_contains": "north gate",
+   "expect_includes": [
+    "memory.recall"
+   ]
   },
   {
    "id": "mem-noinfer-01",
@@ -588,6 +594,208 @@
    "group": "general",
    "prompt": "what can you do?",
    "no_tool": true
+  },
+  {
+   "id": "web-search-01",
+   "group": "web",
+   "prompt": "Search the web for the live status of train 16589",
+   "expect_includes": [
+    "web.search"
+   ],
+   "expect_args": {
+    "query": "~16589"
+   },
+   "mocks": {
+    "web.search": {
+     "summary": "1. 16589 Live Status - RailYatri (https://www.railyatri.in/live-train-status/16589): Rani Chennamma Express running status",
+     "results": [
+      {
+       "title": "16589 Live Status - RailYatri",
+       "url": "https://www.railyatri.in/live-train-status/16589",
+       "snippet": "running status"
+      }
+     ]
+    },
+    "web.research": {
+     "summary": "Research notes for \"16589\" (cite the source numbers):\nSource 1: 16589 Live Status (https://www.railyatri.in/live-train-status/16589)\nRani Chennamma Express running on time",
+     "count": 1
+    }
+   },
+   "reply_contains": "16589"
+  },
+  {
+   "id": "web-extract-01",
+   "group": "web",
+   "prompt": "On https://www.railyatri.in/live-train-status/16589 is the train delayed at Davangere?",
+   "expect_includes": [
+    "web.extract"
+   ],
+   "expect_args": {
+    "url": "~railyatri"
+   },
+   "mocks": {
+    "web.extract": {
+     "summary": "From https://www.railyatri.in/live-train-status/16589, parts matching \"delay\": Davangere (DVG) 3:20 to 3:22 Mostly Delayed … Belagavi arrival 8:50 departure 8:55 on time",
+     "url": "https://www.railyatri.in/live-train-status/16589",
+     "matched_words": 1
+    },
+    "web.fetch": {
+     "summary": "From https://www.railyatri.in/live-train-status/16589, parts matching \"delay\": Davangere (DVG) 3:20 to 3:22 Mostly Delayed … Belagavi arrival 8:50 departure 8:55 on time",
+     "url": "https://www.railyatri.in/live-train-status/16589",
+     "matched_words": 1
+    }
+   },
+   "reply_contains": "Davangere"
+  },
+  {
+   "id": "web-research-01",
+   "group": "web",
+   "prompt": "What is the advance reservation period for Indian Railways tickets?",
+   "expect_includes": [
+    "web.research"
+   ],
+   "mocks": {
+    "web.research": {
+     "summary": "Research notes for \"advance reservation period\" (cite the source numbers):\nSource 1: Indian Railways ARP (https://indianrailways.gov.in/arp)\nThe advance reservation period is 60 days excluding the date of journey.",
+     "sources": [
+      {
+       "title": "Indian Railways ARP",
+       "url": "https://indianrailways.gov.in/arp"
+      }
+     ],
+     "count": 1
+    },
+    "web.search": {
+     "summary": "1. Indian Railways ARP (https://indianrailways.gov.in/arp): 60 days",
+     "results": []
+    }
+   },
+   "reply_contains": "60"
+  },
+  {
+   "id": "rem-interval-01",
+   "group": "reminders",
+   "prompt": "Check https://www.railyatri.in/live-train-status/16589 every 15 minutes and tell me if the train is delayed",
+   "expect_includes": [
+    "reminders.create"
+   ],
+   "expect_args": {
+    "every_minutes": 15
+   },
+   "mocks": {
+    "reminders.create": {
+     "summary": "Reminder \"Train 16589 delay check\" set: every 15 min, next on Wed 28 Oct, 3:15 PM.",
+     "id": "r9",
+     "scheduled": "every 15 min"
+    },
+    "web.extract": {
+     "summary": "From https://www.railyatri.in/live-train-status/16589, parts matching \"delay\": Davangere (DVG) 3:20 to 3:22 Mostly Delayed … Belagavi arrival 8:50 departure 8:55 on time",
+     "url": "https://www.railyatri.in/live-train-status/16589",
+     "matched_words": 1
+    }
+   },
+   "reply_contains": "15"
+  },
+  {
+   "id": "places-set-02",
+   "group": "places",
+   "prompt": "moengage is my office, set it as my office location",
+   "expect_includes": [
+    "places.set"
+   ],
+   "mocks": {
+    "places.set": {
+     "summary": "Saved place \"office\" at 12.93400, 77.61100.",
+     "id": "p3",
+     "label": "office",
+     "lat": 12.934,
+     "lng": 77.611
+    },
+    "device.location": {
+     "summary": "Last known location: latitude 12.93400, longitude 77.61100, 2 min ago.",
+     "lat": 12.934,
+     "lng": 77.611,
+     "age_min": 2
+    }
+   },
+   "reply_contains": "office"
+  },
+  {
+   "id": "money-due-01",
+   "group": "money",
+   "prompt": "Any bills due this week?",
+   "expect_includes": [
+    "money.bills_due"
+   ],
+   "mocks": {
+    "money.bills_due": {
+     "summary": "BESCOM: ₹2,140 due Wed 28 Oct 2026. SBI CARD: ₹98,708 due Wed 11 Nov 2026.",
+     "count": 2
+    },
+    "sms.search": {
+     "summary": "No SMS found.",
+     "messages": [],
+     "count": 0
+    }
+   },
+   "reply_contains": "2,140"
+  },
+  {
+   "id": "money-anomaly-01",
+   "group": "money",
+   "prompt": "Is any bill unusually high this month?",
+   "expect_includes": [
+    "money.bill_anomalies"
+   ],
+   "mocks": {
+    "money.bill_anomalies": {
+     "summary": "BESCOM: ₹2,140 vs usual ₹1,010 (last 3: ₹980, ₹1,010, ₹1,120).",
+     "count": 1
+    }
+   },
+   "reply_contains": "BESCOM"
+  },
+  {
+   "id": "money-balance-01",
+   "group": "money",
+   "prompt": "What is my bank balance?",
+   "expect_includes": [
+    "money.balances"
+   ],
+   "mocks": {
+    "money.balances": {
+     "summary": "Account x1234: ₹34,810.10 as of Sat 18 Oct, 7:20 PM. Account x5678: ₹80,000 as of Wed 22 Oct, 8:00 AM.",
+     "count": 2
+    },
+    "sms.search": {
+     "summary": "No SMS found.",
+     "count": 0
+    }
+   },
+   "reply_contains": "34,810"
+  },
+  {
+   "id": "money-spend-01",
+   "group": "money",
+   "prompt": "How much did I spend on Swiggy this month?",
+   "expect_includes": [
+    "money.spend"
+   ],
+   "expect_args": {
+    "merchant": "~swiggy"
+   },
+   "mocks": {
+    "money.spend": {
+     "summary": "Spent ₹995 in the last 30 days. SWIGGY: ₹995 (2×).",
+     "total": 995,
+     "count": 1
+    },
+    "sms.search": {
+     "summary": "No SMS found.",
+     "count": 0
+    }
+   },
+   "reply_contains": "995"
   }
  ],
  "settings": {

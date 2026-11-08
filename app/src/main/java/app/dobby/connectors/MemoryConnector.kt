@@ -15,7 +15,7 @@ class MemoryConnector(private val store: MemoryStore) : Connector {
     override fun isReady(context: Context) = true
 
     override fun tools() = listOf(
-        ToolSpec("remember", "Save a short fact about the user for later. Example: text='Office map pin is wrong; use 12.934,77.611', tags='office,cab'.",
+        ToolSpec("remember", "Save a short text fact about the user (preferences, accounts, quirks). NOT for locations: 'save this place' or 'X is my office' → places.set.",
             ToolSpec.schema(listOf(Triple("text", "string", "One sentence"), Triple("tags", "string", "Comma-separated keywords")), listOf("text")), Effect.WRITE),
         ToolSpec("recall", "Find saved facts matching keywords.",
             ToolSpec.schema(listOf(Triple("query", "string", "Keywords"), Triple("limit", "integer", "Max facts. Default 5")), listOf("query"))),
