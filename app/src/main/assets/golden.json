@@ -719,6 +719,83 @@
     }
    },
    "reply_contains": "office"
+  },
+  {
+   "id": "money-due-01",
+   "group": "money",
+   "prompt": "Any bills due this week?",
+   "expect_includes": [
+    "money.bills_due"
+   ],
+   "mocks": {
+    "money.bills_due": {
+     "summary": "BESCOM: ₹2,140 due Wed 28 Oct 2026. SBI CARD: ₹98,708 due Wed 11 Nov 2026.",
+     "count": 2
+    },
+    "sms.search": {
+     "summary": "No SMS found.",
+     "messages": [],
+     "count": 0
+    }
+   },
+   "reply_contains": "2,140"
+  },
+  {
+   "id": "money-anomaly-01",
+   "group": "money",
+   "prompt": "Is any bill unusually high this month?",
+   "expect_includes": [
+    "money.bill_anomalies"
+   ],
+   "mocks": {
+    "money.bill_anomalies": {
+     "summary": "BESCOM: ₹2,140 vs usual ₹1,010 (last 3: ₹980, ₹1,010, ₹1,120).",
+     "count": 1
+    }
+   },
+   "reply_contains": "BESCOM"
+  },
+  {
+   "id": "money-balance-01",
+   "group": "money",
+   "prompt": "What is my bank balance?",
+   "expect_includes": [
+    "money.balances"
+   ],
+   "mocks": {
+    "money.balances": {
+     "summary": "Account x1234: ₹34,810.10 as of Sat 18 Oct, 7:20 PM. Account x5678: ₹80,000 as of Wed 22 Oct, 8:00 AM.",
+     "count": 2
+    },
+    "sms.search": {
+     "summary": "No SMS found.",
+     "count": 0
+    }
+   },
+   "reply_contains": "34,810"
+  },
+  {
+   "id": "money-spend-01",
+   "group": "money",
+   "prompt": "How much did I spend on Swiggy this month?",
+   "expect_includes": [
+    "money.spend"
+   ],
+   "expect_args": {
+    "merchant": "~swiggy"
+   },
+   "mocks": {
+    "money.spend": {
+     "summary": "Spent ₹995 in the last 30 days. SWIGGY: ₹995 (2×).",
+     "total": 995,
+     "count": 1
+    },
+    "sms.search": {
+     "summary": "No SMS found.",
+     "count": 0
+    }
+   },
+   "reply_contains": "995"
   }
  ],
  "settings": {

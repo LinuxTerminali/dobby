@@ -29,7 +29,7 @@ interface LlmEngine {
     val loadedModel: ModelEntry?
     /** "GPU" or "CPU": what actually initialised (may differ from the request after a fallback). */
     val loadedBackend: String?
-    suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String, nativeTools: Boolean = false,
+    suspend fun load(entry: ModelEntry, modelPath: String, tools: List<ToolSpec>, executor: ToolExecutor, systemPrompt: String,
                      isAlwaysAllowed: (String) -> Boolean = { false })
     fun send(userText: String): Flow<ChatEvent>
     /** Approximate size of the live conversation (chars sent + received since it started). */

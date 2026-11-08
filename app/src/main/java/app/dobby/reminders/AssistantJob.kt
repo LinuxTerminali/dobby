@@ -29,7 +29,7 @@ class AssistantJob(context: Context, params: WorkerParameters) : CoroutineWorker
             val tools = app.router.listTools()
             engine.load(entry, app.models.fileFor(entry).absolutePath, tools,
                 ToolExecutor { n, a -> app.router.callTool(n, a) },
-                PromptBuilder.system(app, tools.map { it.name }), nativeTools = app.models.toolMode == "native", isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
+                PromptBuilder.system(app, tools.map { it.name }), isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
             val out = StringBuilder()
             engine.send(PromptBuilder.withContext(app, prompt)).collect { if (it is ChatEvent.Token) out.append(it.text) }
             val answer = out.toString().trim()

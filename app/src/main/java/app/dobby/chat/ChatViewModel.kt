@@ -39,18 +39,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (entry == null) { status.value = "Pick a model in the Models tab"; return false }
         if (!app.models.isDownloaded(entry)) { status.value = "Model not downloaded: ${entry.name}"; return false }
         val tools = app.router.listTools()
-        val sig = entry.id + "|" + entry.backend + "|" + app.models.toolMode + "|" + tools.joinToString(",") { it.name }
+        val sig = entry.id + "|" + entry.backend + "|" + tools.joinToString(",") { it.name }
         if (sig == loadedSignature && EngineHolder.get(app).loadedModel != null) return true
         status.value = "Loading ${entry.name}…"
         val executor = ToolExecutor { name, args -> app.router.callTool(name, args) }
         try {
             EngineHolder.get(app).load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }),
-                nativeTools = app.models.toolMode == "native", isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
+                isAlwaysAllowed = { app.permissions.isAlwaysAllowed(it) })
         } catch (e: Exception) {
             status.value = "Load failed: ${e.message}"; return false
         }
         loadedSignature = sig
-        status.value = "${entry.name} · ${EngineHolder.get(app).loadedBackend} · ${tools.size} tools (${app.models.toolMode})"
+        status.value = "${entry.name} · ${EngineHolder.get(app).loadedBackend} · ${tools.size} tools"
         return true
     }
 
@@ -100,7 +100,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 compactNow(force = true)
                 runtimeErrors++
                 val entry = app.models.all().firstOrNull { it.id == app.models.selectedId }
-                if (runtimeErrors >= 2 && entry != null && app.models.withBackend(entry).backend != "cpu") {
+                if (runtimeErrors >= 2 && entry != null && !entry.isRemote && app.models.withBackend(entry).backend != "cpu") {
                     // Second failure in this session: fall back to CPU (slower, but it does not hit this limit).
                     app.models.setBackendOverride(entry.id, "cpu")
                     messages += ChatMessage(nextId++, "system", "GPU failed twice; switched this model to CPU (slower). Change it back in Models.")

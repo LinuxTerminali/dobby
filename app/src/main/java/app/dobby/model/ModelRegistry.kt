@@ -58,17 +58,23 @@ class ModelRegistry(private val context: Context) {
         val shared = File(sharedDir, e.file)
         return if (sharedAllowed() && shared.exists()) shared else File(privateDir, e.file).let { if (it.exists() || !sharedAllowed()) it else shared }
     }
-    fun isDownloaded(e: ModelEntry) = fileFor(e).let { it.exists() && it.length() > 1_000_000 }
+    fun isDownloaded(e: ModelEntry) = e.isRemote || fileFor(e).let { it.exists() && it.length() > 1_000_000 }
+
+    /** Remote endpoints are custom entries; the API key is kept out of the entry JSON. */
+    fun addRemote(name: String, baseUrl: String, modelName: String, apiKey: String): ModelEntry {
+        val id = "remote-" + name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        val e = ModelEntry(id = id, name = name, file = "", url = "", sizeGb = 0.0, backend = "remote", supportsTools = true, supportsVision = false,
+            license = "", gated = false, custom = true, runtime = "remote", endpoint = baseUrl.trim(), modelName = modelName.trim())
+        addCustom(e); setApiKey(id, apiKey)
+        return e
+    }
+    fun apiKey(id: String): String = prefs.getString("key:$id", "") ?: ""
+    fun setApiKey(id: String, key: String) = prefs.edit().putString("key:$id", key).apply()
 
     /** Per-model backend override ("gpu"/"cpu"); null = the registry default. */
     fun backendOverride(id: String): String? = prefs.getString("backend:$id", null)
     fun setBackendOverride(id: String, backend: String?) = prefs.edit().apply { if (backend == null) remove("backend:$id") else putString("backend:$id", backend) }.apply()
     fun withBackend(e: ModelEntry): ModelEntry = backendOverride(e.id)?.let { e.copy(backend = it) } ?: e
-
-    /** "prompt" (default: app parses TOOL lines) or "native" (runtime tool calling). */
-    var toolMode: String
-        get() = prefs.getString("tool_mode", "prompt") ?: "prompt"
-        set(v) = prefs.edit().putString("tool_mode", v).apply()
 
     var selectedId: String?
         get() = prefs.getString("selected", null)

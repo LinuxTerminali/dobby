@@ -12,8 +12,10 @@ object ToolRouter {
     val GROUPS = listOf(
         Group("calls", listOf("call", "called", "calls", "missed", "rang", "dial", "talk to", "talked"),
             listOf("calls.recent", "calls.missed", "calls.with")),
-        Group("sms", listOf("sms", "message", "messages", "text me", "texted", "bill", "debited", "credited", "upi", "bank", "balance", "spent", "spend", "paid", "due", "otp"),
-            listOf("sms.search", "sms.recent", "gmail.search")),
+        Group("sms", listOf("sms", "message", "messages", "text me", "texted", "debited", "credited", "upi", "otp"),
+            listOf("sms.search", "sms.recent")),
+        Group("money", listOf("bill", "bills", "due", "balance", "balances", "spent", "spend", "spending", "paid", "pay", "bank", "money", "salary", "rent", "statement", "card", "expensive", "unusual"),
+            listOf("money.bills_due", "money.bill_anomalies", "money.balances", "money.spend", "sms.search")),
         Group("gmail", listOf("email", "emails", "mail", "gmail", "inbox"),
             listOf("gmail.search", "gmail.read")),
         Group("docs", listOf("doc", "docs", "document", "sheet", "sheets", "spreadsheet", "google"),

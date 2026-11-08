@@ -11,6 +11,7 @@ class ConnectorRegistry(context: Context, memory: MemoryStore) {
     val all: List<Connector> = listOf(
         CallLogConnector(context),
         SmsConnector(context),
+        MoneyConnector(context),
         GmailConnector(context, auth),
         DocsConnector(context, auth),
         SheetsConnector(context, auth),

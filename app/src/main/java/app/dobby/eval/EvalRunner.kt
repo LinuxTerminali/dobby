@@ -44,8 +44,7 @@ class EvalRunner(private val app: App) {
         }
         Approvals.autoApprove = true
         val t0 = System.currentTimeMillis()
-        engine.load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }, places),
-            nativeTools = app.models.toolMode == "native")
+        engine.load(entry, app.models.fileFor(entry).absolutePath, tools, executor, PromptBuilder.system(app, tools.map { it.name }, places))
         val loadMs = System.currentTimeMillis() - t0
 
         val results = mutableListOf<EvalMetrics.CaseResult>()
@@ -73,11 +72,11 @@ class EvalRunner(private val app: App) {
 
         val dir = File(app.getExternalFilesDir(null), "eval").apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
-        val tag = "${entry.id}-${entry.backend}-${app.models.toolMode}-$stamp"
+        val tag = "${entry.id}-${entry.backend}-$stamp"
         val csv = File(dir, "$tag.csv")
         csv.writeText(EvalMetrics.csvHeader() + "\n" + results.joinToString("\n") { EvalMetrics.csvRow(it) } + "\n")
         val summary = EvalMetrics.summary(results, entry.name) +
-            "\ntools ${app.models.toolMode} · backend ${engine.loadedBackend} · load ${loadMs} ms · pss ${pssMb} MB · battery ${(chargeStart - chargeEnd) / 1000} mAh · ${app.models.fileFor(entry).name}"
+            "\nruntime ${entry.runtime} · backend ${engine.loadedBackend} · load ${loadMs} ms · pss ${pssMb} MB · battery ${(chargeStart - chargeEnd) / 1000} mAh · ${app.models.fileFor(entry).name}"
         val txt = File(dir, "$tag.txt")
         txt.writeText(summary + "\n\n" + results.filter { !it.pass }.joinToString("\n") {
             "FAIL ${it.id}: calls=${it.calls} args=${it.firstArgs.take(120)} bad=${it.badNumbers} reply=${it.reply.take(160).replace('\n', ' ')}" })

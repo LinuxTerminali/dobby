@@ -47,15 +47,6 @@ fun SettingsScreen() {
         }
         Text("If Play Protect blocks the install, use adb install -r from a computer.", style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(16.dp))
-        SectionTitle("Tool calling")
-        var mode by remember { mutableStateOf(app.models.toolMode) }
-        Row {
-            listOf("prompt" to "Prompt (app parses TOOL lines)", "native" to "Native (runtime)").forEach { (v, label) ->
-                FilterChip(selected = mode == v, onClick = { mode = v; app.models.toolMode = v }, label = { Text(label) }, modifier = Modifier.padding(end = 8.dp))
-            }
-        }
-        Hint("Prompt mode avoids the runtime's tool path, which corrupted digits in testing. Switch to Native only to compare.")
-        Spacer(Modifier.height(16.dp))
         SectionTitle("Permissions")
         var allowed by remember { mutableStateOf(app.permissions.allAllowed()) }
         if (allowed.isEmpty()) Hint("Deleting tools (memory.forget, reminders.delete, places.delete) ask before running. Tools you set to \"Always allow\" appear here.")

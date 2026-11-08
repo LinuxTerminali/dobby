@@ -98,7 +98,7 @@ class PromptToolsTest {
 class ToolRouterTest {
     private fun spec(n: String) = ToolSpec(n, "d", ToolSpec.schema(emptyList()))
     private val all = listOf("calls.recent","calls.missed","calls.with","sms.search","sms.recent","gmail.search","gmail.read","docs.read","sheets.read",
-        "web.search","web.fetch","web.extract","web.research","device.now","device.location","reminders.create","reminders.list","reminders.delete",
+        "money.bills_due","money.bill_anomalies","money.balances","money.spend","money.rescan","web.search","web.fetch","web.extract","web.research","device.now","device.location","reminders.create","reminders.list","reminders.delete",
         "places.list","places.set","places.add_rule","places.events","places.delete","memory.remember","memory.recall","memory.forget","memory.profile").map(::spec)
 
     @Test fun routesByKeyword() {
