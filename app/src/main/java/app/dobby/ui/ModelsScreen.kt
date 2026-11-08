@@ -51,9 +51,13 @@ fun ModelsScreen() {
     var evalOut by remember { mutableStateOf<String?>(null) }
     var evalBusy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { while (true) { delay(1000); tick++ } }
+    val models = remember(tick) { app.models.all() }
+    // Poll progress only while a download is running; never rebuild the list.
+    LaunchedEffect(models) {
+        while (models.any { m -> app.downloader.progress(m)?.running == true }) { delay(1000); tick++ }
+    }
 
-    key(tick) {
+    run {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
                 if (!app.models.sharedAllowed()) {
@@ -75,8 +79,8 @@ fun ModelsScreen() {
                 }
                 evalOut?.let { Hint(it) }
             }
-            items(app.models.all()) { m ->
-                ModelCard(m, onChanged = { tick++ }, evalBusy = evalBusy, onEval = {
+            items(models, key = { it.id }) { m ->
+                ModelCard(m, tick, onChanged = { tick++ }, evalBusy = evalBusy, onEval = {
                     evalBusy = true; evalOut = "Running eval…"
                     scope.launch {
                         evalOut = runCatching { EvalRunner(app).run(m) { p -> evalOut = "Eval $p" } }
@@ -94,8 +98,9 @@ fun ModelsScreen() {
 }
 
 @Composable
-private fun ModelCard(m: ModelEntry, onChanged: () -> Unit, evalBusy: Boolean, onEval: () -> Unit) {
+private fun ModelCard(m: ModelEntry, tick: Int, onChanged: () -> Unit, evalBusy: Boolean, onEval: () -> Unit) {
     val app = LocalContext.current.applicationContext as App
+    @Suppress("UNUSED_VARIABLE") val refresh = tick   // recompose this card when the parent ticks
     val downloaded = app.models.isDownloaded(m)
     val prog = app.downloader.progress(m)
     val selected = app.models.selectedId == m.id

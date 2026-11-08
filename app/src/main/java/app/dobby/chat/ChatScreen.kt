@@ -60,8 +60,11 @@ private val SUGGESTIONS = listOf(
 fun ChatScreen(vm: ChatViewModel) {
     var input by remember { mutableStateOf("") }
     val list = rememberLazyListState()
-    LaunchedEffect(vm.messages.size, vm.messages.lastOrNull()?.text?.length) {
-        if (vm.messages.isNotEmpty()) list.animateScrollToItem(vm.messages.lastIndex)
+    // New message: jump to it. Streaming text: follow only if the user is already at the bottom.
+    LaunchedEffect(vm.messages.size) { if (vm.messages.isNotEmpty()) list.scrollToItem(vm.messages.lastIndex) }
+    val lastLen = vm.messages.lastOrNull()?.text?.length ?: 0
+    LaunchedEffect(lastLen) {
+        if (vm.messages.isNotEmpty() && !list.canScrollForward) list.scrollToItem(vm.messages.lastIndex)
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {

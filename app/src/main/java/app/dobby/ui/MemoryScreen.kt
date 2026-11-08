@@ -41,7 +41,8 @@ fun MemoryScreen() {
     var tags by remember { mutableStateOf("") }
     var tick by remember { mutableIntStateOf(0) }
 
-    key(tick) {
+    val facts = remember(tick) { app.memory.all() }
+    run {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
                 Hint("Everything here stays on the phone. The profile goes into every prompt; facts are added when they match what you ask.")
@@ -59,9 +60,8 @@ fun MemoryScreen() {
                 }
                 SectionTitle("Facts", Modifier.padding(top = 16.dp))
             }
-            val facts = app.memory.all()
             if (facts.isEmpty()) item { Hint("No facts yet. Tell Dobby things in chat, or add one above.") }
-            items(facts) { f ->
+            items(facts, key = { it.id }) { f ->
                 ListItem(
                     headlineContent = { Text(f.text) },
                     supportingContent = { Text(listOf(f.tags, f.source).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.labelSmall) },

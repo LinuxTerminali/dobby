@@ -79,14 +79,14 @@ fun ConnectorsScreen() {
         }
     }
 
-    key(tick) {
+    run {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = ScreenPadding) {
             item {
                 Hint("Each connector is a set of tools the model can call. Switch one on and complete its setup.")
                 error?.let { Hint(it, error = true) }
             }
-            items(app.connectors.all) { c ->
-                ConnectorCard(c,
+            items(app.connectors.all, key = { it.id }) { c ->
+                ConnectorCard(c, tick,
                     onPermissions = { permLauncher.launch(it.toTypedArray()) },
                     onGoogle = { scopes ->
                         try { authLauncher.launch(app.connectors.googleAuth().signInIntent(scopes)) }
@@ -100,8 +100,9 @@ fun ConnectorsScreen() {
 }
 
 @Composable
-private fun ConnectorCard(c: Connector, onPermissions: (List<String>) -> Unit, onGoogle: (List<String>) -> Unit, onChanged: () -> Unit) {
+private fun ConnectorCard(c: Connector, tick: Int, onPermissions: (List<String>) -> Unit, onGoogle: (List<String>) -> Unit, onChanged: () -> Unit) {
     val ctx = LocalContext.current
+    @Suppress("UNUSED_VARIABLE") val refresh = tick
     val app = ctx.applicationContext as App
     val ready = c.isReady(ctx)
     var enabled by remember(c.id) { mutableStateOf(app.connectors.state.isEnabled(c.id)) }
