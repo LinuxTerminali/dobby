@@ -27,6 +27,23 @@ class TextExtractTest {
         assertEquals(1, none.size); assertEquals(0, none[0].score)
     }
 
+    @Test fun tablesBecomeRowsWithCells() {
+        val t = TextExtract.mainText("<table><tr><th>Station</th><th>Arr</th></tr><tr><td>Tumkur</td><td>23:56</td></tr></table>")
+        assertTrue(t, t.contains("Station | Arr") && t.contains("Tumkur | 23:56"))
+    }
+
+    @Test fun linksAreAbsoluteAndRanked() {
+        val html = """<a href="/live-train-status/16589">16589 live status</a> <a href="https://x.com/img.png">img</a> <a href="#top">top</a> <a href="https://erail.in/train/16589">eRail 16589 timetable</a>"""
+        val links = TextExtract.links(html, "https://www.railyatri.in/trains")
+        assertEquals(listOf("https://www.railyatri.in/live-train-status/16589", "https://erail.in/train/16589"), links.map { it.url })
+        assertEquals("eRail 16589 timetable", TextExtract.relevantLinks(links, "16589 timetable", 1)[0].text)
+    }
+
+    @Test fun queryVariants() {
+        val v = TextExtract.queryVariants("What is the advance reservation period for Indian Railways tickets?")
+        assertTrue(v.toString(), v.size >= 2 && v[1] == "advance reservation period indian railways tickets")
+    }
+
     @Test fun searchParseHandlesDdgHtml() {
         val ddg = """<div class="result"><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.railyatri.in%2Flive-train-status%2F16589&amp;rut=abc">16589 Live Status - RailYatri</a>
             <a class="result__snippet" href="x">Rani <b>Chennamma</b> Express running status</a></div>

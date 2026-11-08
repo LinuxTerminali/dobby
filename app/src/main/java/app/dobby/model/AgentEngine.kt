@@ -27,6 +27,7 @@ class AgentEngine(private val backends: (ModelEntry) -> ChatBackend) : LlmEngine
         close()
         this.tools = tools; this.executor = executor; this.alwaysAllowed = isAlwaysAllowed
         this.systemPrompt = if (tools.isEmpty()) systemPrompt else systemPrompt + "\n\n" + PromptTools.protocol()
+        Capacity.current = Capacity.forEntry(entry)
         val b = backends(entry)
         b.open(this.systemPrompt)
         backend = b; loadedModel = entry; contextChars = 0
@@ -57,6 +58,7 @@ class AgentEngine(private val backends: (ModelEntry) -> ChatBackend) : LlmEngine
                 val offered = ToolRouter.route(userText, tools)
                 send(ChatEvent.ToolResult("router", "offered ${offered.size}/${tools.size}: " + offered.joinToString(", ") { it.name }))
                 var next = PromptTools.turnMessage(userText, offered)
+                val cap = Capacity.current
                 var steps = 0; var corrected = false; var replyRetried = false
                 val sources = mutableListOf(userText)
                 val cal = Calendar.getInstance()
@@ -83,13 +85,13 @@ class AgentEngine(private val backends: (ModelEntry) -> ChatBackend) : LlmEngine
                         break
                     }
                     val argIssues = Validator.checkArgs(userText, call.args)
-                    if (argIssues.isNotEmpty() && steps < PromptTools.MAX_STEPS) {
+                    if (argIssues.isNotEmpty() && steps < cap.maxSteps) {
                         steps++
                         send(ChatEvent.ToolResult("validator", "blocked ${call.name}: " + argIssues.joinToString { "${it.key}=${it.got} (user said ${it.expected})" }))
                         next = Validator.argCorrection(argIssues)
                         continue
                     }
-                    if (steps >= PromptTools.MAX_STEPS) { send(ChatEvent.Token("\n[stopped after ${PromptTools.MAX_STEPS} tool calls]")); break }
+                    if (steps >= cap.maxSteps) { send(ChatEvent.Token("\n[stopped after ${cap.maxSteps} tool calls]")); break }
                     steps++
                     send(ChatEvent.ToolCall(call.name, call.args.toString()))
                     val effect = tools.firstOrNull { it.name == call.name }?.effect ?: Effect.READ
@@ -99,7 +101,7 @@ class AgentEngine(private val backends: (ModelEntry) -> ChatBackend) : LlmEngine
                         else try { executor!!.execute(call.name, call.args) } catch (e: Exception) { JSONObject().put("error", e.message ?: e.toString()) }
                     send(ChatEvent.ToolResult(call.name, result.toString().take(600)))
                     sources += result.toString()
-                    next = PromptTools.resultMessage(call.name, result)
+                    next = PromptTools.resultMessage(call.name, result, cap.toolDataChars)
                     if (isEmptyResult(result)) next += "\n(The result was empty. If another listed tool could answer this, call it; otherwise tell the user.)"
                 }
             }

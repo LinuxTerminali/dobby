@@ -64,6 +64,10 @@ backend and is unit-tested with a scripted fake. Backends:
 HDFC/SBI/BESCOM/Airtel-style wording; extend per bank) into a local SQLite ledger; the model never parses
 money text. A daily check: "every day at 8 check bills due this week and unusual bills" → a reminder with a prompt.
 
+## Capacity
+Limits scale with the model (`model/Capacity`): on-device = small (1.5K tool data, 5 steps, compaction at
+10K, 3 research pages); remote = large (8K, 10 steps, 60K, 5 pages, longer passages, more search results).
+
 ## Web tools
 `web.search` (DuckDuckGo HTML, or Brave Search with a key in Settings), `web.fetch` (readable main text,
 JS pages rendered in a hidden WebView), `web.extract(url, query)` (the passages that match a question,

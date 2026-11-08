@@ -56,7 +56,8 @@ object PromptTools {
         When asked how much in total, add the amounts and state the total.
         You CAN check things later or repeatedly: reminders.create with a prompt (and every_minutes or a time)
         makes you run that prompt with tools on schedule. Prefer the tools listed for this request.
-        For facts you do not know, use web.research; cite the source number. For a specific part of a page, web.extract. Use memory.remember only when the user asks you to
+        For facts you do not know, use web.research and cite sources as [1], [2] after the sentences they support.
+        For a specific part of a page, web.extract. If sources disagree, say so. Use memory.remember only when the user asks you to
         remember something or states a lasting fact about themselves (a place, an account, a preference); never for
         passing events such as what they spent or did today.
     """.trimIndent()
@@ -138,11 +139,11 @@ object PromptTools {
     }
 
     /** Summary line first (the model copies it), then the data for details. */
-    fun resultMessage(name: String, result: JSONObject): String {
+    fun resultMessage(name: String, result: JSONObject, dataCap: Int = DATA_CAP): String {
         val summary = result.optString("summary", "")
-        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(DATA_CAP)
+        if (summary.isEmpty()) return "TOOL_RESULT $name: " + result.toString().take(dataCap)
         val data = JSONObject(result.toString()).apply { remove("summary") }.toString()
-        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(DATA_CAP)
+        return "TOOL_RESULT $name: $summary\nDATA: " + data.take(dataCap)
     }
 
     const val CORRECTION = "That was not a valid tool call. Reply with exactly one line: TOOL {\"name\":\"<tool>\",\"args\":{...}} using a tool from the list, or answer the user directly."

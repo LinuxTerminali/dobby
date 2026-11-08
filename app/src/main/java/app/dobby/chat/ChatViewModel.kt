@@ -9,6 +9,7 @@ import app.dobby.App
 import app.dobby.memory.PromptBuilder
 import app.dobby.model.Approvals
 import app.dobby.model.ChatEvent
+import app.dobby.model.Capacity
 import app.dobby.model.Compactor
 import app.dobby.model.EngineHolder
 import app.dobby.model.ToolExecutor
@@ -120,7 +121,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Past the budget: summarise older turns, save lasting facts, restart the conversation with the note. */
     private suspend fun maybeCompact() {
         val engine = EngineHolder.get(app)
-        if (!Compactor.shouldCompact(engine.contextChars, turnsSinceCompaction)) return
+        if (!Compactor.shouldCompact(engine.contextChars, turnsSinceCompaction, Capacity.current.compactChars)) return
         compactNow(force = false)
     }
 

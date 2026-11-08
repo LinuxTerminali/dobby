@@ -105,6 +105,12 @@ class AgentEngineTest {
         assertEquals("SYS", fb.system)
     }
 
+    @Test fun capacityFollowsRuntime() {
+        assertEquals(Capacity.SMALL, Capacity.forEntry(entry))
+        assertEquals(Capacity.LARGE, Capacity.forEntry(entry.copy(runtime = "remote", endpoint = "http://h/v1", modelName = "qwen3")))
+        assertTrue(Capacity.LARGE.toolDataChars > Capacity.SMALL.toolDataChars && Capacity.LARGE.maxSteps > Capacity.SMALL.maxSteps)
+    }
+
     @Test fun remoteDeltaParsing() {
         assertEquals("Hel", RemoteBackend.parseDelta("""{"choices":[{"delta":{"content":"Hel"}}]}"""))
         assertEquals("", RemoteBackend.parseDelta("""{"choices":[{"delta":{"role":"assistant"}}]}"""))

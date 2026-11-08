@@ -17,7 +17,7 @@ object Compactor {
     data class Turn(val role: String, val text: String)
     data class Result(val summary: String, val facts: List<Pair<String, String>>)  // (text, tags)
 
-    fun shouldCompact(contextChars: Long, turns: Int) = turns >= MIN_TURNS && contextChars > BUDGET_CHARS
+    fun shouldCompact(contextChars: Long, turns: Int, budget: Int = BUDGET_CHARS) = turns >= MIN_TURNS && contextChars > budget
 
     /** Turns to summarise vs turns to keep verbatim. */
     fun split(turns: List<Turn>): Pair<List<Turn>, List<Turn>> {
